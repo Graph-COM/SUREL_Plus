@@ -98,9 +98,11 @@ usage: main.py [-h] [--device DEVICE] [--log_steps LOG_STEPS]
                [--use_val] [--load_ppr] [--save_ppr] [--log_dir LOG_DIR]
                [--debug]
 
-<details>
-  <summary>Optional Arguments</summary>
+```
 
+<details>
+  <summary>Optional Arguments</summary> 
+  
 ```
 optional arguments:
   -h, --help            show this help message and exit
