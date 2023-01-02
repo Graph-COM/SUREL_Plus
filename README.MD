@@ -60,22 +60,22 @@ For more details, please refer to the [PyTorch](https://pytorch.org/) and [PyTor
 
 - To train **SUREL+** for link prediction on Collab:
 ```bash
-python main.py --dataset ogbl-collab --metric hit --num_step 4 --num_walk 200 --use_val --sencoder LP
+python main.py --dataset ogbl-collab --metric Hits --sencoder LP --num_steps 3 --num_walks 200 --aggr attn --use_val
 ```
 
 - To train **SUREL+** for link prediction on Citation2:
 ```bash
-python main.py --dataset ogbl-citation2 --metric mrr --num_step 4 --num_walk 100 --sencoder PPR --topk 100
+python main.py --dataset ogbl-citation2 --metric MRR --sencoder ppr --topk 100  --aggr mean
 ```
 
-- To train **SUREL+** for relation prediction on MAG(A-P):
+- To train **SUREL+** for relation type prediction on MAG(A-P):
 ```bash
-python main_hetro.py --dataset mag --relation write --metric mrr --num_step 3 --num_walk 100 --k 10 --sencoder LP
+python main.py --dataset mag --relation write --metric MRR --sencoder LP --num_step 3 --num_walk 100 --k 10 
 ```
 
-- To train **SUREL+** for higher-order prediction on DBLP:
+- To train **SUREL+** for higher-order pattern prediction on DBLP:
 ```bash
-python main_horder.py --dataset DBLP-coauthor --metric mrr --num_step 3 --num_walk 100 --sencoder LP
+python main_horder.py --dataset DBLP-coauthor --metric mrr --num_step 3 --num_walk 100 
 ```
 
 - All detailed training logs can be found at `<log_dir>/<dataset>/<training-time>.log`.
@@ -83,34 +83,20 @@ python main_horder.py --dataset DBLP-coauthor --metric mrr --num_step 3 --num_wa
 
 ## Usage
 ```
-usage: Interface for SUREL framework [-h]
-                                     [--dataset {ogbl-ppa,ogbl-citation2,ogbl-collab,mag,DBLP-coauthor,tags-math}]
-                                     [--model {RNN,MLP,Transformer,GNN}]
-                                     [--layers LAYERS]
-                                     [--hidden_dim HIDDEN_DIM] [--x_dim X_DIM]
-                                     [--data_usage DATA_USAGE]
-                                     [--train_ratio TRAIN_RATIO]
-                                     [--valid_ratio VALID_RATIO]
-                                     [--test_ratio TEST_RATIO]
-                                     [--metric {auc,mrr,hit}] [--seed SEED]
-                                     [--gpu_id GPU_ID] [--nthread NTHREAD]
-                                     [--B_size B_SIZE] [--num_walk NUM_WALK]
-                                     [--num_step NUM_STEP] [--k K]
-                                     [--directed DIRECTED] [--use_feature]
-                                     [--use_weight] [--use_degree]
-                                     [--use_htype] [--use_val] [--norm NORM]
-                                     [--optim OPTIM] [--rtest RTEST]
-                                     [--eval_steps EVAL_STEPS]
-                                     [--batch_size BATCH_SIZE]
-                                     [--batch_num BATCH_NUM] [--lr LR]
-                                     [--dropout DROPOUT] [--l2 L2]
-                                     [--patience PATIENCE] [--repeat REPEAT]
-                                     [--log_dir LOG_DIR] [--res_dir RES_DIR]
-                                     [--stamp STAMP]
-                                     [--summary_file SUMMARY_FILE] [--debug]
-                                     [--abs] [--save] [--load_dict]
-                                     [--load_model] [--memo MEMO]
-```
+usage: main.py [-h] [--device DEVICE] [--log_steps LOG_STEPS]
+               [--num_layers NUM_LAYERS] [--hidden_channels HIDDEN_CHANNELS]
+               [--dropout DROPOUT] [--batch_size BATCH_SIZE] [--lr LR]
+               [--train_ratio TRAIN_RATIO] [--valid_perc VALID_PERC]
+               [--epochs EPOCHS] [--eval_steps EVAL_STEPS] [--runs RUNS]
+               [--alpha ALPHA] [--eps EPS] [--topk TOPK]
+               [--num_walks NUM_WALKS] [--num_steps NUM_STEPS] [--k K]
+               [--nthread NTHREAD]
+               [--dataset {ogbl-ppa,ogbl-ddi,ogbl-citation2,ogbl-collab,ogbl-vessel,mag}]
+               [--relation {write,cite}] [--metric {AUC,MRR,Hits}]
+               [--aggrs {mean,lstm,attn}] [--sencoder {LP,ppr,spd,deg}]
+               [--reduced] [--use_raw] [--use_node_embedding] [--use_weight]
+               [--use_val] [--load_ppr] [--save_ppr] [--log_dir LOG_DIR]
+               [--debug]
 
 <details>
   <summary>Optional Arguments</summary>
@@ -118,61 +104,45 @@ usage: Interface for SUREL framework [-h]
 ```
 optional arguments:
   -h, --help            show this help message and exit
-  --dataset {mag}       dataset name
+  --device DEVICE
+  --log_steps LOG_STEPS
+  --num_layers NUM_LAYERS
+  --hidden_channels HIDDEN_CHANNELS
+  --dropout DROPOUT
+  --batch_size BATCH_SIZE
+  --lr LR
+  --train_ratio TRAIN_RATIO
+  --valid_perc VALID_PERC
+  --epochs EPOCHS
+  --eval_steps EVAL_STEPS
+  --runs RUNS
+  --alpha ALPHA         teleport probability in PPR
+  --eps EPS             precision of PPR approx
+  --topk TOPK           sample size of node set
+  --num_walks NUM_WALKS
+                        number of walks
+  --num_steps NUM_STEPS
+                        step of walks
+  --k K                 negative samples
+  --nthread NTHREAD     number of threads
+  --dataset {ogbl-ppa,ogbl-ddi,ogbl-citation2,ogbl-collab,ogbl-vessel,mag}
+                        dataset name
   --relation {write,cite}
                         relation type
-  --model {RNN,MLP,Transformer,GNN}
-                        base model to use
-  --layers LAYERS       number of layers
-  --hidden_dim HIDDEN_DIM
-                        hidden dimension
-  --x_dim X_DIM         dim of raw node features
-  --data_usage DATA_USAGE
-                        use partial dataset
-  --train_ratio TRAIN_RATIO
-                        mask partial edges for training
-  --valid_ratio VALID_RATIO
-                        use partial valid set
-  --test_ratio TEST_RATIO
-                        use partial test set
-  --metric {auc,mrr,hit}
+  --metric {AUC,MRR,Hits}
                         metric for evaluating performance
-  --seed SEED           seed to initialize all the random modules
-  --gpu_id GPU_ID       gpu id
-  --nthread NTHREAD     number of thread
-  --B_size B_SIZE       set size of train sampling
-  --num_walk NUM_WALK   total number of random walks
-  --num_step NUM_STEP   total steps of random walk
-  --k K                 number of paired negative queries
-  --directed DIRECTED   whether to treat the graph as directed
-  --use_feature         whether to use raw features as input
+  --aggrs {mean,lstm,attn}
+                        type of set neural encoder
+  --sencoder {LP,ppr,spd,deg}
+                        type of structure encoder
+  --reduced             whether to compress structural features
+  --use_raw             whether to use raw features as input
+  --use_node_embedding  whether to load node embedding
   --use_weight          whether to use edge weight as input
-  --use_degree          whether to use node degree as input
-  --use_htype           whether to use node type as input
   --use_val             whether to use val as input
-  --norm NORM           method of normalization
-  --optim OPTIM         optimizer to use
-  --rtest RTEST         step start to test
-  --eval_steps EVAL_STEPS
-                        number of steps to test
-  --batch_size BATCH_SIZE
-                        mini-batch size (train)
-  --batch_num BATCH_NUM
-                        mini-batch size (test)
-  --lr LR               learning rate
-  --dropout DROPOUT     dropout rate
-  --l2 L2               l2 regularization (weight decay)
-  --patience PATIENCE   early stopping steps
-  --repeat REPEAT       number of training instances to repeat
+  --load_ppr            whether to load precomputed ppr
+  --save_ppr            whether to save calculated ppr
   --log_dir LOG_DIR     log directory
-  --res_dir RES_DIR     resource directory
-  --stamp STAMP         time stamp
-  --summary_file SUMMARY_FILE
-                        brief summary of training results
   --debug               whether to use debug mode
-  --save                whether to save RPE to files
-  --load_dict           whether to load RPE from files
-  --load_model          whether to load saved model from files
-  --memo MEMO           notes
 ```
 </details>
