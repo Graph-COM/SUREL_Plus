@@ -1,18 +1,18 @@
 <h1 align="center">SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning</h1>
 
 SUREL+ is a novel set-based computation framework for scalable SGRL.
-It avoids the costly procedure of query-specific subgraph extraction while using sampled node sets whose join can be used as proxies of the subgraphs to make prediction. 
+It avoids the costly procedure of query-specific subgraph extraction while using sampled node sets whose join can be used as proxies of the subgraphs to make predictions. 
 SUREL+ benefits from the reusability of these node sets across different queries, which substantially reduces memory/time consumption by avoiding having heavy node duplication in walk-based representaion of SUREL.
 SUREL+ designs dedicated sparse storage **SpG** and sparse join operation **SpJoin** to handle the irregularity of node sets. 
 SUREL+ also adopts a modular design, where users may flexibly choose among different set samplers, structure encoders and set neural encoders to compensate the loss of structural information caused by set-based representations for their own SGRL tasks.
 
 Currently, we support:
 - Large-scale graph learning tasks: link prediction / relation prediction / higher-order pattern prediction
-- Preprocessing and training on seven datasets in OGB format
+- Preprocessing and training on seven datasets in Open Graph Benchmark ([OGB](https://ogb.stanford.edu/docs/home/)) format
 - Flexible modules:
   - Set Samplers: walk-based, metric-based
   - Structure Encoders: Landing Probabilities, Shortest Path Distance, PPR scores
-  - Neural Set Encoders: MLP+meanp pooling, LSTM-based, Attention-based
+  - Neural Set Encoders: MLP+mean pooling, LSTM-based, Attention-based
 - Single GPU training and evaluation
 - Structural Features + Node Features
 
