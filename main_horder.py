@@ -3,7 +3,7 @@ import time, sys
 
 from ogb.linkproppred import Evaluator
 
-from random_walks import rw_matrix
+from random_walks import subg_matrix
 
 from logger import Logger
 from dataloader import *
@@ -67,7 +67,7 @@ def main():
 
     prep_start = time.time()
     node_idx = np.arange(G_enc.shape[0])
-    x, xpe = rw_matrix(G_enc, node_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
+    x, xpe = subg_matrix(G_enc, node_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
     if args.reduced:
         xpe = torch.from_numpy(xpe).to(device).float() / args.num_walks
         logger.info(f'Encoding Size {xpe.shape}')

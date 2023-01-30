@@ -1,7 +1,20 @@
+import os
+import random
 import torch
 import numpy as np
 from torch_geometric.utils import negative_sampling, add_self_loops
 from sklearn.preprocessing import normalize
+
+
+def set_random_seed(args):
+    seed = args.seed
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 
 def encoding(x, adj, encoding='deg'):

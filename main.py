@@ -1,7 +1,7 @@
 import argparse
 from ogb.linkproppred import Evaluator
 from scipy.sparse import save_npz, load_npz
-from random_walks import rw_matrix
+from random_walks import subg_matrix
 import time, sys
 import pprgo
 
@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--eval_steps', type=int, default=5)
     parser.add_argument('--runs', type=int, default=5)
+    parser.add_argument('--seed', type=int, default=0, help='seed to initialize all the random modules')
     parser.add_argument('--alpha', type=float, default=0.5, help='teleport probability in PPR')
     parser.add_argument('--eps', type=float, default=0.0001, help='precision of PPR approx')
     parser.add_argument('--topk', type=int, default=100, help='sample size of  node set')
@@ -58,6 +59,8 @@ def main():
     except:
         parser.print_help()
         sys.exit(0)
+
+    set_random_seed(args)
 
     alpha = args.alpha
     topk = args.topk
@@ -145,9 +148,9 @@ def main():
     inf_idx = np.arange(G_inf.shape[0])
     if args.sencoder == 'LP':
         # obtain node sets and LP for training
-        x, xpe = rw_matrix(G_obsrv, train_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
+        x, xpe = subg_matrix(G_obsrv, train_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
         # obtain node sets and LP for inference
-        z, zpe = rw_matrix(G_inf, inf_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
+        z, zpe = subg_matrix(G_inf, inf_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
         if args.reduced:
             xpe = torch.from_numpy(xpe).to(device).float() / args.num_walks
             zpe = torch.from_numpy(zpe).to(device).float() / args.num_walks
@@ -176,6 +179,9 @@ def main():
 
     predictor = Net(num_layers=args.num_layers, input_dim=args.num_steps, hidden_dim=args.hidden_channels, out_dim=1,
                     x_dim=data.num_feature, use_feature=args.use_raw, dropout=args.dropout, aggrs=args.aggrs).to(device)
+
+    logger.info(f'#Model Params {sum(p.numel() for p in predictor.parameters())}')
+
     evaluator = Evaluator(name=args.dataset) if 'mag' not in args.dataset else Evaluator(name='ogbl-citation2')
 
     train_edges = torch.cat(train_edge, dim=1)
@@ -196,10 +202,10 @@ def main():
             if epoch % args.eval_steps == 0:
                 sta = time.time()
                 if 'MRR' in args.metric:
-                    results = inference_mrr(predictor, x, z, inf_edge, evaluator, args.batch_size, device, ptr=ptr,
+                    results, d_inf = inference_mrr(predictor, x, z, inf_edge, evaluator, args.batch_size*args.k, device, ptr=ptr,
                                             rpe=[xpe, zpe])
                 else:
-                    results = inference(predictor, x, z, inf_edge, evaluator, args.batch_size, device,
+                    results, d_inf = inference(predictor, x, z, inf_edge, evaluator, args.batch_size*args.k, device,
                                         ptr=ptr, feature=embed, rpe=[xpe, zpe], metric=args.metric)
                 dt = time.time() - sta
 
@@ -220,13 +226,15 @@ def main():
                                     f'Loss: {loss:.4f}, '
                                     f'Valid: {valid_mrr:.4f}, '
                                     f'Test: {test_mrr:.4f}')
-                    logger.info(f'T_inf {dt:.2f}')
+                    logger.info(f'T_inf {dt:.2f}, T_test {d_inf:.2f}')
                     logger.info('---')
 
                 if 'Hits' in args.metric:
+                    dic = {}
                     for key, result in results.items():
-                        if rlogs[key].add_result(run, result) and (key == args.metric):
-                            break
+                        dic[key] = rlogs[key].add_result(run, result)
+                    if dic[args.metric]:
+                        break
                 else:
                     if rlog.add_result(run, results):
                         break

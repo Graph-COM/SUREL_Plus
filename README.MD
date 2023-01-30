@@ -1,13 +1,12 @@
 <h1 align="center">SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning</h1>
 
 SUREL+ is a novel set-based computation framework for scalable SGRL.
-It avoids the costly procedure of query-specific subgraph extraction while using sampled node sets whose join can be used as proxies of the subgraphs to make predictions. 
-SUREL+ benefits from the reusability of these node sets across different queries, which substantially reduces memory/time consumption by avoiding having heavy node duplication in walk-based representation of SUREL.
+It avoids the costly procedure of query-specific subgraph extraction while using sampled node sets whose join can be used as proxies of the subgraphs to make predictions. SUREL+ benefits from the reusability of these node sets across different queries, which substantially reduces memory/time consumption by avoiding having heavy node duplication in walk-based representation of SUREL.  
 SUREL+ designs dedicated sparse storage **SpG** and sparse join operation **SpJoin** to handle the irregularity of node sets. 
-SUREL+ also adopts a modular design, where users may flexibly choose among different set samplers, structure encoders and set neural encoders to compensate the loss of structural information caused by set-based representations for their own SGRL tasks.
+SUREL+ also adopts a modular design, where users can flexibly choose among different set samplers, structure encoders and set neural encoders for their own SGRL tasks.
 
-Currently, we support:
-- Large-scale graph learning tasks: link prediction / relation prediction / higher-order pattern prediction
+Currently, SUREL+ framework supports:
+- Large-scale graph ML tasks: link prediction / relation prediction / higher-order pattern prediction
 - Preprocessing and training on seven datasets in Open Graph Benchmark ([OGB](https://ogb.stanford.edu/docs/home/)) format
 - Flexible modules:
   - Set Samplers: walk-based, metric-based
@@ -21,7 +20,7 @@ Currently, we support:
 * Ubuntu 20.04
 * CUDA >= 11.3
 * python >= 3.8
-* pytorch >= 1.11.0
+* 1.11.0 <= pytorch <= 1.12.0 
 
 ## SGRL Environment Setup ##
 
@@ -38,12 +37,14 @@ conda env create -f environment.yml
 conda activate sgrl-env
 ```
 
-- Example commends of installation for PyTorch (>= 1.11.0) and torch-geometric (>=2.1.0) with CUDA 11.3:
+- Update: SUREL now support PyTorch 1.12.1 and PyG 2.2.0 with pyg-lib. To install them, simply run
 ```bash
-conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
+conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
 conda install pyg -c pyg
+pip install pyg-lib -f https://data.pyg.org/whl/torch-1.12.0+cu113.html
 ```
-For more details, please refer to the [PyTorch](https://pytorch.org/) and [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html). The code of this repository is lately tested with Python 3.8.13 + PyTorch 1.11.0 + torch-geometric 2.1.0.
+
+For more details, please refer to the [PyTorch](https://pytorch.org/), [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) and [pyg-lib](https://github.com/pyg-team/pyg-lib). The code of this repository is lately tested with Python 3.10.9 + PyTorch 1.12.1 (CUDA 11.3) + torch-geometric 2.2.0.
 
 ## Quick Start
 

@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from torch.nn import BCEWithLogitsLoss
 from sklearn.metrics import roc_auc_score
 import threading
+import time
 
 
 def gather(edge, x, device, ptr=True, encode=None):
@@ -64,13 +65,26 @@ def hgather(hedge, x, device, encode=None):
     return xz, ind
 
 
-def pgather(edge, M, gather_func, njobs=4):
+def bgather(edge, x, out):
+    # obtain subgraph neighbors of left and right endpoints
+    xl, xr = x[edge[0]], x[edge[1]]
+    # convert to boolean mask
+    lmask, rmask = xl > 0, xr > 0
+    xrl, xlr = xr.multiply(lmask) + lmask, xl.multiply(rmask) + rmask
+
+    xl = np.stack([xl.data, xrl.data - 1]).T
+    xr = np.stack([xr.data, xlr.data - 1]).T
+    out[0], out[1] = xl, xr
+    out[2], out[3] = lmask.getnnz(axis=1), rmask.getnnz(axis=1)
+
+
+def pgather(edge, M, device, encode, gather_func, ptr=True, njobs=4):
     out_blocks = np.empty((njobs, 4), dtype=object)
-    edge_blocks = edge.reshape(2, njobs, -1)
+    edge_blocks = np.array_split(edge, njobs, axis=1)
 
     threads = []
     for i in range(njobs):
-        th = threading.Thread(target=gather_func, args=(edge_blocks[:, i, :], M, out_blocks[i]))
+        th = threading.Thread(target=gather_func, args=(edge_blocks[i], M, out_blocks[i]))
         th.start()
         threads.append(th)
 
@@ -78,7 +92,13 @@ def pgather(edge, M, gather_func, njobs=4):
         th.join()
 
     if njobs > 1:
-        return np.vstack([*out_blocks[:, 0], *out_blocks[:, 1]]), np.concatenate([*out_blocks[:, 2], *out_blocks[:, 3]])
+        xz = encode[np.vstack([*out_blocks[:, 0], *out_blocks[:, 1]])]
+        indptr = torch.from_numpy(np.concatenate([[0], *out_blocks[:, 2], *out_blocks[:, 3]])).long()
+        if ptr:  
+            return xz, indptr.cumsum(dim=0).to(device)
+        else:
+            return xz, torch.arange(len(indptr)-1, dtype=torch.long).repeat_interleave(indptr[1:]).to(device)
+            
     return out_blocks
 
 
@@ -95,7 +115,7 @@ def train(predictor, g, edges, label, optimizer, batch_size, device, k, ptr=True
         embed = feature[edge] if feature is not None else None
         target = label[perm]
         labels.append(target)
-        x, ind = gather(edge, g, device, ptr=ptr, encode=rpe)
+        x, ind = pgather(edge, g, device, rpe, bgather, ptr=ptr)
         pred = predictor.forward(x, ind, feature=embed)
         preds.append(pred.detach().sigmoid())
         loss = BCEWithLogitsLoss()(pred, target)
@@ -173,7 +193,9 @@ def inference(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True
     xpe, zpe = rpe
     #     pos_train_pred, _ = test_split('train', x, xpe)
     pos_valid_pred, neg_valid_pred = test_split('valid', z, zpe)
+    sta = time.time()
     pos_test_pred, neg_test_pred = test_split('test', z, zpe)
+    t_inf = time.time() - sta
     print(f'#valid_pos {len(pos_valid_pred)} #valid_neg {len(neg_valid_pred)} '
           f'#test_pos {len(pos_test_pred)} #test_neg {len(neg_test_pred)}')
 
@@ -207,7 +229,7 @@ def inference(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True
         })[f'rocauc']
         results = (0, valid_rocauc, test_rocauc)
 
-    return results
+    return results, t_inf
 
 
 @torch.no_grad()
@@ -224,14 +246,14 @@ def inference_mrr(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=
         pos_preds = []
         for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size)):
             edge = pos_edge[:, perm]
-            x_inf, ind = gather(edge, embed, device, ptr=ptr, encode=encode)
+            x_inf, ind = pgather(edge, embed, device, encode, bgather, ptr=ptr)
             pos_preds += [predictor(x_inf, ind).squeeze()]
         pos_pred = torch.cat(pos_preds, dim=0).sigmoid()
 
         neg_preds = []
         for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size)):
             edge = neg_edge[:, perm]
-            x_inf, ind = gather(edge, embed, device, ptr=ptr, encode=encode)
+            x_inf, ind = pgather(edge, embed, device, encode, bgather, ptr=ptr)
             neg_preds += [predictor(x_inf, ind).squeeze()]
         neg_pred = torch.cat(neg_preds, dim=0).sigmoid().view(-1, k)
 
@@ -243,8 +265,10 @@ def inference_mrr(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=
     xpe, zpe = rpe
     #     train_mrr = test_split('train', x, xpe)
     valid_mrr = test_split('valid', z, zpe)
+    sta = time.time()
     test_mrr = test_split('test', z, zpe)
-    return 0, valid_mrr, test_mrr
+    t_inf = time.time() - sta
+    return (0, valid_mrr, test_mrr), t_inf
 
 
 @torch.no_grad()

@@ -219,7 +219,6 @@ class DE_Hyper_Dataset():
         self.data = torch.load(f'./dataset/sgrl/{dataset}.pl')
         self.obsrv_edge = torch.from_numpy(self.data['edge_index'])
         self.split_edge = self.data['triplets']
-        self.num_tup = len(self.data['tuples'])
         self.mask_ratio = mask_ratio
         self.k = k
         self.gtype = 'Hypergraph'
@@ -232,7 +231,7 @@ class DE_Hyper_Dataset():
     def get_edge_split(self, ratio, k=1000, seed=2021):
         np.random.seed(seed)
         tuples = torch.from_numpy(self.data['triplets'])
-        idx = np.random.permutation(self.num_tup)
+        idx = np.random.permutation(len(self.data['tuples']))
         num_train = int(ratio * self.num_tup)
         split_idx = {'train': {'hedge': tuples[idx[:num_train]]}}
         val_idx, test_idx = np.split(idx[num_train:], 2)
@@ -249,7 +248,7 @@ class DE_Hyper_Dataset():
         node_neg = torch.randint(self.num_nodes, (self.pos_hedge.size(0), self.k))
         self.neg_hedge = torch.cat([self.pos_hedge[:, :2].repeat(1, self.k).view(-1, 2).t(), node_neg.view(1, -1)])
         logger.info(
-            f'node size {self.num_nodes}, feature dim {self.num_feature}, edge size {self.num_tup} with mask ratio {self.mask_ratio}')
+            f'node size {self.num_nodes}, feature dim {self.num_feature}, edge size {self.obsrv_edge.shape[0]} with mask ratio {self.mask_ratio}')
         obsrv_edge = self.obsrv_edge
 
         # load observed graph and save as a CSR sparse matrix
