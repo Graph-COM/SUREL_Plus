@@ -2,7 +2,7 @@
 
 SUREL+ is a novel set-based computation framework for scalable SGRL.
 It avoids the costly procedure of query-specific subgraph extraction while using sampled node sets whose join can be used as proxies of the subgraphs to make predictions. 
-SUREL+ benefits from the reusability of these node sets across different queries, which substantially reduces memory/time consumption by avoiding having heavy node duplication in walk-based representaion of SUREL.
+SUREL+ benefits from the reusability of these node sets across different queries, which substantially reduces memory/time consumption by avoiding having heavy node duplication in walk-based representation of SUREL.
 SUREL+ designs dedicated sparse storage **SpG** and sparse join operation **SpJoin** to handle the irregularity of node sets. 
 SUREL+ also adopts a modular design, where users may flexibly choose among different set samplers, structure encoders and set neural encoders to compensate the loss of structural information caused by set-based representations for their own SGRL tasks.
 
@@ -22,11 +22,6 @@ Currently, we support:
 * CUDA >= 11.3
 * python >= 3.8
 * pytorch >= 1.11.0
-* PyG >= 2.1.0
-* gcc >= 8.4
-* cmake >= 3.16
-* make >= 4.2
-* sureal_gacc = 1.0
 
 ## SGRL Environment Setup ##
 
@@ -56,7 +51,7 @@ For more details, please refer to the [PyTorch](https://pytorch.org/) and [PyTor
 
 2. Clone the repository `git clone https://github.com/Graph-COM/SUREL_Plus.git`
 
-3. Build and install SUREL_GAcc `cd surel_gacc;python3 setup.py install`
+3. Build and install the [SubGAcc](https://github.com/VeritasYin/subg_acc) library `cd subg_acc;python3 setup.py install`
 
 - To train **SUREL+** for link prediction on Collab:
 ```bash
