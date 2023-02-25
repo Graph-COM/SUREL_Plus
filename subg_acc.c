@@ -5,10 +5,17 @@
 #include <numpy/arrayobject.h>
 #include <omp.h>
 #include "uthash.h"
+#include <sys/time.h>
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 #define DEBUG 0
 #define NMAX 65536
+#define NEBMAX 1e6
+
+#define HASH_FIND_LONG(head, findlong, out) \
+    HASH_FIND(hh, head, findlong, sizeof(long), out)
+#define HASH_ADD_LONG(head, longfield, add) \
+    HASH_ADD(hh, head, longfield, sizeof(long), add)
 
 typedef struct item_int
 {
@@ -16,6 +23,13 @@ typedef struct item_int
     int val;
     UT_hash_handle hh;
 } dict_int;
+
+typedef struct item_long
+{
+    long key;
+    int val;
+    UT_hash_handle hh;
+} dict_long;
 
 /* hash of hashes */
 typedef struct item
@@ -42,6 +56,13 @@ static int find_key_int(dict_int *maps, int key)
 {
     dict_int *s;
     HASH_FIND_INT(maps, &key, s); /* s: output pointer */
+    return s ? s->val : -1;
+}
+
+static int find_key_long(dict_long *maps, long key)
+{
+    dict_long *s;
+    HASH_FIND_LONG(maps, &key, s); /* s: output pointer */
     return s ? s->val : -1;
 }
 
@@ -362,9 +383,7 @@ fail:
     Py_XDECREF(ptr);
     Py_XDECREF(neighs);
     Py_XDECREF(seq);
-    PyArray_DiscardWritebackIfCopy(oarr);
     PyArray_XDECREF(oarr);
-    PyArray_DiscardWritebackIfCopy(obj_arr);
     PyArray_XDECREF(obj_arr);
     return NULL;
 }
@@ -483,7 +502,6 @@ fail:
     Py_XDECREF(ptr);
     Py_XDECREF(neighs);
     Py_XDECREF(seq);
-    PyArray_DiscardWritebackIfCopy(oarr);
     PyArray_XDECREF(oarr);
     return NULL;
 }
@@ -623,9 +641,7 @@ fail:
     Py_XDECREF(qarr);
     Py_XDECREF(seq);
     delete_all(items);
-    PyArray_DiscardWritebackIfCopy(oarr);
     PyArray_XDECREF(oarr);
-    PyArray_DiscardWritebackIfCopy(xarr);
     PyArray_XDECREF(xarr);
     return NULL;
 }
@@ -633,11 +649,11 @@ fail:
 static PyObject *set_sampler(PyObject *self, PyObject *args, PyObject *kws)
 {
     PyObject *arg1 = NULL, *arg2 = NULL, *query = NULL;
-    PyArrayObject *ptr = NULL, *neighs = NULL, *seq = NULL, *oarr = NULL, *xarr = NULL, *narr = NULL;
-    int num_walks = 100, num_steps = 3, seed = 111413, nthread = -1, bucket = -1;
+    PyArrayObject *ptr = NULL, *neighs = NULL, *seq = NULL, *oarr = NULL, *xarr = NULL, *narr = NULL, *earr = NULL;
+    int num_walks = 100, num_steps = 3, seed = 111413, nthread = -1, bucket = -1, reduce = -1;
 
-    static char *kwlist[] = {"ptr", "neighs", "query", "num_walks", "num_steps", "bucket", "nthread", "seed", NULL};
-    if (!(PyArg_ParseTupleAndKeywords(args, kws, "OOO|iiiii", kwlist, &arg1, &arg2, &query, &num_walks, &num_steps, &bucket, &nthread, &seed)))
+    static char *kwlist[] = {"indptr", "indices", "query", "num_walks", "num_steps", "bucket", "nthread", "seed", "debug", NULL};
+    if (!(PyArg_ParseTupleAndKeywords(args, kws, "OOO|iiiiii", kwlist, &arg1, &arg2, &query, &num_walks, &num_steps, &bucket, &nthread, &seed, &reduce)))
     {
         PyErr_SetString(PyExc_TypeError, "Input parsing error.\n");
         return NULL;
@@ -663,57 +679,80 @@ static PyObject *set_sampler(PyObject *self, PyObject *args, PyObject *kws)
     int ncol = num_steps + 1;
     int stride = (bucket < 0) ? num_walks * num_steps + 1 : bucket;
 
-    // Dynamically allocate memory using malloc() for large n
-    int *buffer;
-    int buffer_size = min(n, NMAX) * stride * ncol;
-    buffer = (int *)malloc(buffer_size * sizeof(int));
-    if (buffer == NULL)
+    // create an array for compressed encoding / buffer
+    int buffer_size = min(n, NMAX) * stride;
+    npy_intp xdims[2] = {buffer_size, ncol};
+    xarr = (PyArrayObject *)PyArray_SimpleNew(2, xdims, NPY_SHORT);
+    if (xarr == NULL)
     {
         PyErr_SetString(PyExc_MemoryError, "Failed to allocate memory for buffer.\n");
-        return NULL;
+        goto fail;
     }
+    short *buffer = (short *)PyArray_DATA(xarr);
 
-    int *encoding;
-    size_t enc_size = n * num_walks * ncol;
-    encoding = (int *)malloc(enc_size * sizeof(int));
+    // Dynamically allocate memory using malloc() for large n
+    short *encoding;
+    long enc_size = (long)n * num_walks * ncol;
+    encoding = (short *)PyMem_RawMalloc(enc_size * sizeof(short));
     if (encoding == NULL)
     {
         PyErr_SetString(PyExc_MemoryError, "Failed to allocate memory for encoding.\n");
         return NULL;
     }
 
-    int *nsize;
-    nsize = (int *)malloc(n * sizeof(int));
-    size_t *ncumsum;
-    ncumsum = (size_t *)malloc((n + 1) * sizeof(size_t));
+    // create an array for storing remapped index of encoding
+    npy_intp odims[1] = {(long)n * stride};
+    oarr = (PyArrayObject *)PyArray_EMPTY(1, odims, NPY_INT, 0);
+    int *nidx = (int *)PyArray_DATA(oarr);
+    if (oarr == NULL)
+    {
+        PyErr_SetString(PyExc_MemoryError, "Failed to allocate memory for indexing.\n");
+        goto fail;
+    }
+
+    // create an array for storing set size
+    npy_intp ndims[1] = {n};
+    narr = (PyArrayObject *)PyArray_ZEROS(1, ndims, NPY_INT, 0);
+    if (narr == NULL)
+    {
+        PyErr_SetString(PyExc_MemoryError, "Failed to allocate memory for storing set size.\n");
+        goto fail;
+    }
+    int *nsize = (int *)PyArray_DATA(narr);
+
+    long *ncumsum;
+    ncumsum = (long *)PyMem_RawMalloc((n + 1) * sizeof(long));
     ncumsum[0] = 0;
-    int maxset = 0;
 
     if (nthread > 0)
     {
         omp_set_num_threads(nthread);
     }
     int thread_num = omp_get_thread_num();
-    unsigned int private_seed = (unsigned int)(seed + thread_num);
+    uint private_seed = (uint)(seed + thread_num);
 
-    int blk = 1, nblk = 2 + ((n - 1) / NMAX);
+    struct timeval wtic, wtac;
+    gettimeofday(&wtic, 0);
+    int maxset = 0, blk = 1, nblk = 2 + ((n - 1) / NMAX);
     while (blk < nblk)
     {
-        memset(buffer, 0, buffer_size * sizeof(int));
+        memset(buffer, 0, buffer_size * ncol * sizeof(*buffer));
+        // max node id 2,147,483,647
         int begin = (blk - 1) * NMAX, end = min(blk * NMAX, n);
 #pragma omp parallel
         {
 #pragma omp for
             for (int i = begin; i < end; i++)
             {
-                dict_int *set = NULL;
+                dict_int *node_set = NULL;
                 int offset = (i % NMAX) * stride * ncol;
-                int num_hop1 = Cptr[Cseq[i] + 1] - Cptr[Cseq[i]];
+                // handle potential very large neighborhood case
+                int num_hop1 = min(Cptr[Cseq[i] + 1] - Cptr[Cseq[i]], NEBMAX);
+                buffer[offset] = num_walks;
 
                 if (num_hop1 == 0)
                 {
                     nsize[i] = 1;
-                    buffer[offset] = Cseq[i];
                     for (int step = 1; step <= num_steps; step++)
                     {
                         buffer[offset + step] = num_walks;
@@ -740,9 +779,9 @@ static PyObject *set_sampler(PyObject *self, PyObject *args, PyObject *kws)
                 dict_int *root = malloc(sizeof(*root));
                 root->key = Cseq[i];
                 root->val = 0;
-                HASH_ADD_INT(set, key, root);
+                HASH_ADD_INT(node_set, key, root);
 
-                int count = 1;
+                int count = 1, flag = 0;
                 for (int walk = 0; walk < num_walks; walk++)
                 {
                     int curr = Cseq[i];
@@ -769,28 +808,38 @@ static PyObject *set_sampler(PyObject *self, PyObject *args, PyObject *kws)
                             }
                         }
 
-                        int idx = find_key_int(set, curr);
+                        int idx = find_key_int(node_set, curr);
                         if (idx < 0)
                         {
-                            // unique node visited by walks from the root
-                            dict_int *k = malloc(sizeof(*k));
-                            k->key = curr;
-                            k->val = count;
-                            HASH_ADD_INT(set, key, k);
-                            idx = count;
-                            count++;
+                            if (count < stride)
+                            {
+                                // unique node visited by walks from the root
+                                dict_int *k = malloc(sizeof(*k));
+                                k->key = curr;
+                                k->val = count;
+                                HASH_ADD_INT(node_set, key, k);
+                                idx = count;
+                                count++;
+                            }
+                            else
+                            {
+                                flag = 1;
+                                continue;
+                            }
                         }
                         buffer[offset + idx * ncol + step + 1]++;
                     }
                 }
 
                 nsize[i] = count;
+                if (flag)
+                    printf("#SubGAcc: key %d exceeds the buffer, try a larger bucket size > %d.\n", Cseq[i], stride);
                 // free memory
                 dict_int *cur_item, *tmp;
-                HASH_ITER(hh, set, cur_item, tmp)
-                { // use the first entry of encoding to store node id
-                    buffer[offset + cur_item->val * ncol] = cur_item->key;
-                    HASH_DEL(set, cur_item);
+                HASH_ITER(hh, node_set, cur_item, tmp)
+                { // store node id to nidx
+                    nidx[(long)i * stride + cur_item->val] = cur_item->key;
+                    HASH_DEL(node_set, cur_item);
                     free(cur_item);
                 }
             }
@@ -803,74 +852,98 @@ static PyObject *set_sampler(PyObject *self, PyObject *args, PyObject *kws)
             {
                 maxset = nsize[j];
             }
-            if (ncumsum[j + 1] * ncol > enc_size)
+            // make sure access enc array in boundary
+            while (ncumsum[j + 1] * ncol > enc_size)
             {
                 enc_size *= 1.5;
-                encoding = realloc(encoding, enc_size * sizeof(int));
+                encoding = PyMem_RawRealloc(encoding, enc_size * sizeof(*encoding));
                 if (encoding != NULL)
                 {
-                    printf("#SubGAcc: resizing encoding array to %ld.\n", enc_size);
+                    printf("#SubGAcc: resizing enc array to %ld.\n", enc_size / ncol);
                 }
                 else
                 {
-                    PyErr_SetString(PyExc_MemoryError, "Failed to reallocate memory of encoding.\n");
+                    PyErr_SetString(PyExc_MemoryError, "Failed to reallocate memory of encoding array.\n");
                     return NULL;
                 }
             }
             memcpy(encoding + ncumsum[j] * ncol, buffer + (j % NMAX) * stride * ncol, nsize[j] * ncol * sizeof(*buffer));
+            memmove(nidx + ncumsum[j], nidx + (long)j * stride, nsize[j] * sizeof(*nidx));
         }
         blk += 1;
     }
-    free(buffer);
+    gettimeofday(&wtac, 0);
+    double dtw = (long)(wtac.tv_sec - wtic.tv_sec) + (wtac.tv_usec - wtic.tv_usec) * 1e-6;
+    long ntotal = ncumsum[n];
+    printf("#SubGAcc: #total %ld; #max_set %d of %d; buffer usage %.2f%%; dT_w %.2fs\n", ntotal, maxset, stride, (double)ntotal / n / stride * 100, dtw);
 
-    size_t ntotal = ncumsum[n];
-    printf("#SubGAcc: total size %ld; max set size %d of %d; buffer usage %.2f%%\n", ntotal, maxset, stride, ntotal / (double)(n * stride) * 100);
-    if (maxset > stride)
-    {
-        PyErr_SetString(PyExc_AssertionError, "Boundary violation in encoding array.\n");
-        return NULL;
-    }
-
-    encoding = realloc(encoding, ntotal * ncol * sizeof(int));
+    gettimeofday(&wtic, 0);
+    encoding = PyMem_RawRealloc(encoding, ntotal * ncol * sizeof(*encoding));
     if (encoding == NULL)
     {
         PyErr_SetString(PyExc_MemoryError, "Failed to resize encoding array.\n");
         return NULL;
     }
 
-    int proj[ncol];
-    proj[0] = 1;
-    for (int i = 1; i < ncol; i++)
+    npy_intp new_odims[2] = {2, ntotal};
+    PyArray_Dims oadims;
+    oadims.ptr = new_odims;
+    oadims.len = 2;
+    PyObject *OarrObj = PyArray_Resize((PyArrayObject *)oarr, &oadims, 0, NPY_ANYORDER);
+    if (OarrObj == NULL)
     {
-        proj[i] = (num_walks + 1) * proj[i - 1];
+        goto fail;
+    }
+    Py_DECREF(OarrObj);
+    nidx = (int *)PyArray_DATA(oarr);
+
+    ulong LEAD;
+    // __builtin_clz returns the number of leading 0-bits in x, starting at the most significant bit position.
+    // If x is 0, the result is undefined
+    const int SHIFT = 32 - __builtin_clz(num_walks);
+    LEAD = (ncol - 1) * SHIFT;
+    if (sizeof(ulong) * 8 >= 1 + LEAD)
+    {
+        printf("#SubGAcc: SHIFT %d, LEAD %ld, w_enc %ld, w_hash %ld ", SHIFT, LEAD, sizeof(*encoding) * 8, sizeof(ulong) * 8);
+        LEAD = (ulong)1 << LEAD;
+        printf("LEAD mask 0x%016lx\n", LEAD);
+    }
+    else
+    {
+        PyErr_SetString(PyExc_AssertionError, "Longer width of type for hasing key needed > INT64.\n");
+        return NULL;
     }
 
-    // create an array for storing set size
-    npy_intp ndims[1] = {n};
-    narr = (PyArrayObject *)PyArray_SimpleNew(1, ndims, NPY_INT);
-    if (narr == NULL)
-        goto fail;
-    int *Cnarr = (int *)PyArray_DATA(narr);
-    memcpy(Cnarr, nsize, n * sizeof(int));
-    free(nsize);
+    ulong *bithash;
+    bithash = (ulong *)PyMem_RawCalloc(ntotal, sizeof(ulong));
+    if (bithash == NULL)
+    {
+        PyErr_SetString(PyExc_MemoryError, "Failed to allocate memory for hashing.\n");
+        return NULL;
+    }
 
-    // create an array for storing remapped index of encoding
-    npy_intp odims[2] = {ntotal, 2};
-    oarr = (PyArrayObject *)PyArray_ZEROS(2, odims, NPY_INT, 0);
-    if (oarr == NULL)
-        goto fail;
-    int *Coarr = (int *)PyArray_DATA(oarr);
+    if (reduce > 0)
+    {
+        // keep a copy of enc for debug
+        npy_intp edims[2] = {ntotal, ncol};
+        earr = (PyArrayObject *)PyArray_SimpleNew(2, edims, NPY_SHORT);
+        int *Cearr = (int *)PyArray_DATA(earr);
+        if (earr == NULL)
+            goto fail;
+        memcpy(Cearr, encoding, ntotal * ncol * sizeof(*encoding));
+    }
 
 #pragma omp parallel
     {
 #pragma omp for
         // remap encoding to integer
-        for (size_t i = 0; i < ntotal; i++)
+        for (long i = 0; i < ntotal; i++)
         {
-            Coarr[i * 2] = encoding[i * ncol];
             for (int j = 1; j < ncol; j++)
             {
-                Coarr[i * 2 + 1] += encoding[i * ncol + j] * proj[j - 1];
+                // int -> bit | concat | shift
+                bithash[i] = bithash[i] << SHIFT;
+                bithash[i] |= encoding[i * ncol + j];
             }
         }
     }
@@ -878,99 +951,85 @@ static PyObject *set_sampler(PyObject *self, PyObject *args, PyObject *kws)
     // correct landing counts for root nodes
     for (int k = 0; k < n; k++)
     {
-        Coarr[ncumsum[k] * 2 + 1] += proj[ncol - 1];
+        bithash[ncumsum[k]] |= LEAD;
     }
 
-    dict_int *unique = NULL;
-    int count = 0, root = 0;
-    for (size_t i = 0; i < ntotal; i++)
+    dict_long *unique = NULL;
+    int count = 0, idx;
+    ulong curr;
+    for (long i = 0; i < ntotal; i++)
     {
-        long int curr = Coarr[i * 2 + 1];
-        if (curr < 0)
-        {
-            PyErr_SetString(PyExc_IndexError, "Index out of range.\n");
-            goto fail;
-        }
-
-        int idx = find_key_int(unique, curr);
+        curr = bithash[i];
+        idx = find_key_long(unique, curr);
         if (idx < 0)
         {
-            dict_int *k = malloc(sizeof(*k));
-            k->key = curr;
-            k->val = count;
-            HASH_ADD_INT(unique, key, k);
+            dict_long *kh = malloc(sizeof(*kh));
+            kh->key = curr;
+            kh->val = count;
+            HASH_ADD_LONG(unique, key, kh);
             idx = count;
-            // resume the first entry of encoding
-            if (i == ncumsum[root])
-            {
-                encoding[i * ncol] = num_walks;
-                root++;
-            }
-            else
-            {
-                encoding[i * ncol] = 0;
-            }
-            // compress the encoding array
-            if (idx != (int)i)
+            if ((long)idx != i)
             {
                 memmove(encoding + idx * ncol, encoding + i * ncol, ncol * sizeof(*encoding));
             }
             count++;
         }
-        else
-        {
-            if (i == ncumsum[root])
-            {
-                root++;
-            }
-        }
-        Coarr[i * 2 + 1] = idx;
+        nidx[ntotal + i] = idx;
     }
+    PyMem_RawFree(ncumsum);
+    PyMem_RawFree(bithash);
 
-    if (root < n)
+    npy_intp new_xdims[2] = {count, ncol};
+    PyArray_Dims xadims;
+    xadims.ptr = new_xdims;
+    xadims.len = PyArray_NDIM(oarr);
+    PyObject *XarrObj = PyArray_Resize((PyArrayObject *)xarr, &xadims, 0, NPY_ANYORDER);
+    if (XarrObj == NULL)
     {
-        PyErr_SetString(PyExc_AssertionError, "Data of seed nodes are corrupted.\n");
         goto fail;
     }
-    printf("#SubGAcc: enc unique size %d; compression ratio %.2f\n", count, ntotal / (float)count);
-    free(ncumsum);
+    Py_DECREF(XarrObj);
 
-    // create an array for compressed encoding
-    npy_intp xdims[2] = {count, ncol};
-    xarr = (PyArrayObject *)PyArray_SimpleNew(2, xdims, NPY_INT);
-    if (xarr == NULL)
-        goto fail;
-    int *Cxarr = (int *)PyArray_DATA(xarr);
-
-    dict_int *cur_item, *tmp;
+    dict_long *cur_item, *tmp;
     HASH_ITER(hh, unique, cur_item, tmp)
     {
-        memcpy(Cxarr + cur_item->val * ncol, encoding + cur_item->val * ncol, ncol * sizeof(*encoding));
+        memcpy(buffer + cur_item->val * ncol, encoding + cur_item->val * ncol, ncol * sizeof(*encoding));
         HASH_DEL(unique, cur_item);
         free(cur_item);
+        count--;
     }
-
-    if (DEBUG)
+    if (count != 0)
     {
-        f_format(xdims, Cxarr);
+        PyErr_SetString(PyExc_AssertionError, "Encoding data are corrupted.\n");
+        return NULL;
     }
+    PyMem_RawFree(encoding);
+    gettimeofday(&wtac, 0);
+    dtw = (long)(wtac.tv_sec - wtic.tv_sec) + (wtac.tv_usec - wtic.tv_usec) * 1e-6;
+    printf("#SubGAcc: #enc_unique %d; compression ratio %.2f, dT_e %.2fs\n", (int)new_xdims[0], ntotal / (float)new_xdims[0], dtw);
 
-    free(encoding);
     Py_DECREF(ptr);
     Py_DECREF(neighs);
     Py_DECREF(seq);
-    return Py_BuildValue("[N,N,N]", PyArray_Return(narr), PyArray_Return(oarr), PyArray_Return(xarr));
+    if (DEBUG)
+        f_format(xdims, (int *)buffer);
 
+    if (reduce > 0)
+    {
+        return Py_BuildValue("[N,N,N,N]", PyArray_Return(narr), PyArray_Return(oarr), PyArray_Return(xarr), PyArray_Return(earr));
+    }
+    else
+    {
+        return Py_BuildValue("[N,N,N]", PyArray_Return(narr), PyArray_Return(oarr), PyArray_Return(xarr));
+    }
 fail:
     Py_XDECREF(ptr);
     Py_XDECREF(neighs);
     Py_XDECREF(seq);
-    PyArray_DiscardWritebackIfCopy(narr);
     PyArray_XDECREF(narr);
-    PyArray_DiscardWritebackIfCopy(oarr);
     PyArray_XDECREF(oarr);
-    PyArray_DiscardWritebackIfCopy(xarr);
     PyArray_XDECREF(xarr);
+    PyArray_XDECREF(earr);
     return NULL;
 }
 
