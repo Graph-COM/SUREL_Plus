@@ -61,7 +61,8 @@ class Net(nn.Module):
             fnn = MLP([hidden_dim, hidden_dim], act='relu')
             self.aggr = aggr.AttentionalAggregation(gate_nn, fnn)
         elif aggrs == 'lstm':
-            self.aggr = aggr.LSTMAggregation(in_channels=hidden_dim, out_channels=hidden_dim)
+            self.aggr = aggr.LSTMAggregation(
+                in_channels=hidden_dim, out_channels=hidden_dim)
         else:
             self.aggr = aggr.MeanAggregation()
 

@@ -2,11 +2,13 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from scipy.sparse import csr_matrix
 from torch_sparse import coalesce
 from utils import *
+from torch_geometric.utils import degree, k_hop_subgraph
 
 
 class LinkPropDataset():
     def __init__(self, dataset, mask_ratio=0.05, k=10, use_weight=False, use_coalesce=False, use_feature=False,
                  use_val=False):
+        self.dataset = dataset
         self.data = PygLinkPropPredDataset(name=dataset)
         self.graph = self.data[0]
         self.split_edge = self.data.get_edge_split()
@@ -16,19 +18,16 @@ class LinkPropDataset():
         self.use_weight = (use_weight and 'edge_weight' in self.graph)
         self.use_coalesce = use_coalesce
         self.use_val = use_val
-        self.gtype = 'Homogeneous'
+        self.gtype = 'homo' if 'mag' not in dataset else 'hetero'
 
-        if 'vessel' in dataset:
-            if use_feature:
-                self.graph['x'] = self.graph['x'][:, 3:]
-            else:
-                self.graph['x'][:,:3] = torch.nn.functional.normalize(self.graph['x'][:,:3], dim=0)
-
+        if ('vessel' in dataset) and use_feature:
+            self.graph['x'] = torch.nn.functional.normalize(self.graph['x'], dim=0)
 
         if 'x' in self.graph:
             self.num_nodes, self.num_feature = self.graph['x'].shape
         else:
-            self.num_nodes, self.num_feature = len(torch.unique(self.graph['edge_index'])), 0
+            self.num_nodes = len(torch.unique(self.graph['edge_index']))
+            self.num_feature = 0
 
         if 'source_node' in self.split_edge['train']:
             self.directed = True
@@ -57,13 +56,26 @@ class LinkPropDataset():
             logger.info(
                 f'use_weight {self.use_weight}, use_coalesce {self.use_coalesce}, use_feature {self.use_feature}, use_val {self.use_val}')
 
-        self.num_pos = int(self.len_train * self.mask_ratio)
-        idx = np.random.permutation(self.len_train)
-        # pos sample edges masked for training, observed edges for structural features
-        self.pos_edge, obsrv_edge = self.train_edge[idx[:self.num_pos]], self.train_edge[idx[self.num_pos:]]
+        if 'vessel' in self.dataset:
+            force_undirected = True
+            deg = degree(self.train_edge.t()[0])
+            val, indices = torch.sort(deg)
+            target = indices[val > 0]
+            idx = np.random.permutation(len(target))
+            idx = target[idx[:int(self.len_train * self.mask_ratio)]]
+            _, edge_index, _, edge_mask = k_hop_subgraph(idx, 3, self.train_edge.t())
+            self.pos_edge, obsrv_edge = edge_index.t(), self.train_edge[~edge_mask]
+            self.num_pos = self.pos_edge.shape[0]
+        else:
+            force_undirected = False
+            self.num_pos = int(self.len_train * self.mask_ratio)
+            idx = np.random.permutation(self.len_train)
+            # pos sample edges masked for training, observed edges for structural features
+            self.pos_edge, obsrv_edge = self.train_edge[idx[:self.num_pos]], self.train_edge[idx[self.num_pos:]]
 
         new_edge_index, _ = add_self_loops(self.graph.edge_index)
-        neg_edge = negative_sampling(new_edge_index, num_nodes=self.graph.num_nodes, num_neg_samples=self.len_train)
+        neg_edge = negative_sampling(new_edge_index, num_nodes=self.graph.num_nodes,
+                                     num_neg_samples=self.len_train+1, force_undirected=force_undirected)
         self.neg_edge = neg_edge[:, idx[:min(self.num_pos * self.k, self.len_train)]].t()
 
         val_edge = self.train_edge
@@ -78,12 +90,16 @@ class LinkPropDataset():
 
         if self.use_val:
             # collab allows using valid edges for training
-            obsrv_edge = torch.cat([obsrv_edge, self.split_edge['valid']['edge']])
-            inf_edge = torch.cat([self.train_edge, self.split_edge['valid']['edge']])
+            obsrv_edge = torch.cat(
+                [obsrv_edge, self.split_edge['valid']['edge']])
+            inf_edge = torch.cat(
+                [self.train_edge, self.split_edge['valid']['edge']])
             self.test_nodes = torch.unique(inf_edge).tolist()
             if self.use_weight:
-                obsrv_e_weight = torch.cat([self.train_weight[idx[self.num_pos:]], self.split_edge['valid']['weight']])
-                inf_e_weight = torch.cat([self.train_weight, self.split_edge['valid']['weight']], dim=0)
+                obsrv_e_weight = torch.cat(
+                    [self.train_weight[idx[self.num_pos:]], self.split_edge['valid']['weight']])
+                inf_e_weight = torch.cat(
+                    [self.train_weight, self.split_edge['valid']['weight']], dim=0)
                 if self.use_coalesce:
                     obsrv_edge_col, obsrv_e_weight = coalesce(obsrv_edge.t(), obsrv_e_weight, self.num_nodes,
                                                               self.num_nodes)
@@ -123,7 +139,8 @@ class LinkPropDataset():
 
         if logger is not None:
             # sparsity of graph
-            logger.info(f'Sparsity of loaded graph {G_obsrv.getnnz() / (max_obsrv_idx + 1) ** 2}')
+            logger.info(
+                f'Sparsity of loaded graph {G_obsrv.getnnz() / (max_obsrv_idx + 1) ** 2}')
             # statistic of graph
             logger.info(
                 f'Observed subgraph with {np.sum(G_obsrv.getnnz(axis=1) > 0)} nodes and {int(G_obsrv.nnz / 2)} edges;')
@@ -142,7 +159,8 @@ class DEH_Dataset():
         self.node_type = list(self.data['num_nodes_dict'])
         self.mask_ratio = mask_ratio
         self.k = k
-        rel_key = ('author', 'writes', 'paper') if relation == 'cite' else ('paper', 'cites', 'paper')
+        rel_key = ('author', 'writes', 'paper') if relation == 'cite' else (
+            'paper', 'cites', 'paper')
         self.obsrv_edge = self.data['edge_index'][rel_key]
         self.split_edge = self.data['split_edge']
         self.gtype = 'Heterogeneous' if relation == 'write' else 'Homogeneous'
@@ -171,15 +189,19 @@ class DEH_Dataset():
         self.pos_edge, obsrv_edge = self.train_edge[idx[:self.num_pos]], torch.cat(
             [self.train_edge[idx[self.num_pos:]], self.obsrv_edge])
 
-        new_edge_index, _ = add_self_loops(self.data['split_edge']['train']['edge'].t())
-        neg_edge = negative_sampling(new_edge_index, num_nodes=self.num_nodes, num_neg_samples=self.len_train)
-        self.neg_edge = neg_edge[:, idx[:min(self.num_pos * self.k, self.len_train)]].t()
+        new_edge_index, _ = add_self_loops(
+            self.data['split_edge']['train']['edge'].t())
+        neg_edge = negative_sampling(
+            new_edge_index, num_nodes=self.num_nodes, num_neg_samples=self.len_train)
+        self.neg_edge = neg_edge[:, idx[:min(
+            self.num_pos * self.k, self.len_train)]].t()
 
         val_edge = torch.cat([self.train_edge, self.obsrv_edge])
         len_redge = len(self.obsrv_edge)
 
         pos_e_weight = np.ones(self.num_pos, dtype=int)
-        obsrv_e_weight = np.ones(self.len_train - self.num_pos + len_redge, dtype=int)
+        obsrv_e_weight = np.ones(
+            self.len_train - self.num_pos + len_redge, dtype=int)
         val_e_weight = np.ones(self.len_train + len_redge, dtype=int)
 
         # load observed graph and save as a CSR sparse matrix
@@ -204,11 +226,13 @@ class DEH_Dataset():
 
         G_full = G_val
         # sparsity of graph
-        logger.info(f'Sparsity of loaded graph {G_obsrv.getnnz() / (max_obsrv_idx + 1) ** 2}')
+        logger.info(
+            f'Sparsity of loaded graph {G_obsrv.getnnz() / (max_obsrv_idx + 1) ** 2}')
         # statistic of graph
         logger.info(
             f'Observed subgraph with {np.sum(G_obsrv.getnnz(axis=1) > 0)} nodes and {int(G_obsrv.nnz / 2)} edges;')
-        logger.info(f'Training subgraph with {np.sum(G_pos.getnnz(axis=1) > 0)} nodes and {int(G_pos.nnz / 2)} edges.')
+        logger.info(
+            f'Training subgraph with {np.sum(G_pos.getnnz(axis=1) > 0)} nodes and {int(G_pos.nnz / 2)} edges.')
 
         print('Dataset Ready.')
         return {'train': G_obsrv, 'val': G_val, 'test': G_full}
@@ -235,7 +259,8 @@ class DE_Hyper_Dataset():
         num_train = int(ratio * self.num_tup)
         split_idx = {'train': {'hedge': tuples[idx[:num_train]]}}
         val_idx, test_idx = np.split(idx[num_train:], 2)
-        split_idx['valid'], split_idx['test'] = {'hedge': tuples[val_idx]}, {'hedge': tuples[test_idx]}
+        split_idx['valid'], split_idx['test'] = {
+            'hedge': tuples[val_idx]}, {'hedge': tuples[test_idx]}
         node_neg = torch.randint(torch.max(tuples), (len(val_idx), k))
         split_idx['valid']['hedge_neg'] = torch.cat(
             [split_idx['valid']['hedge'][:, :2].repeat(1, k).view(-1, 2).t(), node_neg.view(1, -1)]).t()
@@ -245,8 +270,10 @@ class DE_Hyper_Dataset():
 
     def process(self, logger):
         self.pos_hedge = self.split_edge['train']['hedge']
-        node_neg = torch.randint(self.num_nodes, (self.pos_hedge.size(0), self.k))
-        self.neg_hedge = torch.cat([self.pos_hedge[:, :2].repeat(1, self.k).view(-1, 2).t(), node_neg.view(1, -1)])
+        node_neg = torch.randint(
+            self.num_nodes, (self.pos_hedge.size(0), self.k))
+        self.neg_hedge = torch.cat([self.pos_hedge[:, :2].repeat(
+            1, self.k).view(-1, 2).t(), node_neg.view(1, -1)])
         logger.info(
             f'node size {self.num_nodes}, feature dim {self.num_feature}, edge size {self.obsrv_edge.shape[0]} with mask ratio {self.mask_ratio}')
         obsrv_edge = self.obsrv_edge
@@ -260,8 +287,10 @@ class DE_Hyper_Dataset():
         assert sum(G_enc.diagonal()) == 0
 
         # sparsity of graph
-        logger.info(f'Sparsity of loaded graph {G_enc.getnnz() / (max_obsrv_idx + 1) ** 2}')
+        logger.info(
+            f'Sparsity of loaded graph {G_enc.getnnz() / (max_obsrv_idx + 1) ** 2}')
         # statistic of graph
-        logger.info(f'Observed subgraph with {np.sum(G_enc.getnnz(axis=1) > 0)} nodes and {int(G_enc.nnz / 2)} edges;')
+        logger.info(
+            f'Observed subgraph with {np.sum(G_enc.getnnz(axis=1) > 0)} nodes and {int(G_enc.nnz / 2)} edges;')
 
         return G_enc

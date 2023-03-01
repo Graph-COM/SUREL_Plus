@@ -17,22 +17,22 @@ def set_random_seed(args):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 
-def encoding(x, adj, encoding='deg'):
+def encoding(x, adj, encoding='DEG'):
     agg = None
-    if encoding == 'deg':
+    if encoding == 'DEG':
         x += normalize(adj, norm='l1', axis=1)
         x_deg = x.getnnz(axis=1)
         x_deg = np.log(x_deg + 1)
         # x_deg = x_deg / x_deg.max()
         agg = x.copy()
         x.data = (x > 0).multiply(x_deg).data
-    elif encoding == 'spd':
+    elif encoding == 'SPD':
         x0 = x > 0
         x1 = adj > 0
         x2 = x1 ** 2
         x = x1 + x0.multiply(x2 * 0.5) + x0 * 0.3
         x.setdiag(2.3)
-    elif encoding == 'ppr':
+    elif encoding == 'PPR':
         x.data = (x.data + 0.1)/(x.data.max()+0.1)
     else:
         raise NotImplementedError
@@ -54,10 +54,13 @@ def evaluate_hits(pos_pred, neg_pred, evaluator):
 
 def get_pos_neg_edges(split, split_edge, edge_index, num_nodes, percent=100):
     if 'edge' in split_edge['train']:
+        if percent < 100:
+            print("Warning: partial validation may only be applied under metric MRR.")
         pos_edge = split_edge[split]['edge'].t()
         if split == 'train':
             new_edge_index, _ = add_self_loops(edge_index)
-            neg_edge = negative_sampling(new_edge_index, num_nodes=num_nodes, num_neg_samples=pos_edge.size(1))
+            neg_edge = negative_sampling(
+                new_edge_index, num_nodes=num_nodes, num_neg_samples=pos_edge.size(1))
         else:
             neg_edge = split_edge[split]['edge_neg'].t()
         # subsample for pos_edge
@@ -104,3 +107,30 @@ def get_pos_neg_edges(split, split_edge, edge_index, num_nodes, percent=100):
     else:
         raise NotImplementedError
     return pos_edge, neg_edge
+
+
+def save_checkpoint(state, filename='checkpoint'):
+    print("=> Saving checkpoint")
+    torch.save(state, f'{filename}.pth.tar')
+
+
+def load_checkpoint(filename, model, optimizer=None):
+    checkpoint = torch.load(f'{filename}.pth.tar')
+    print(f"<= Loading checkpoint from epoch {checkpoint['epoch']}")
+    model.load_state_dict(checkpoint['state_dict'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+
+
+def f_output(results, metric, logger):
+    if 'Hits' in metric:
+        for key, result in results.items():
+            _, valid_hits, test_hits = result
+            logger.info(f'{key}\t '
+                        f'Valid: {100 * valid_hits:.2f}%, '
+                        f'Test: {100 * test_hits:.2f}%')
+    else:
+        _, valid_mrr, test_mrr = results
+        logger.info(f'{metric}\t'
+                    f'Valid: {valid_mrr:.4f}, '
+                    f'Test: {test_mrr:.4f}')

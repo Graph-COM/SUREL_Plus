@@ -51,3 +51,13 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Python C extension
+build/
+dist/
+*.egg-info/
+.vscode/
+
+# Data
+*.npz
+*.txt

@@ -5,17 +5,17 @@
     <a href="https://github.com/Graph-COM/SUREL_Plus"><img src="https://img.shields.io/badge/-Github-grey?logo=github" alt="Github"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSD%202--Clause-red.svg"></a>
     <a href="https://ogb.stanford.edu/docs/leader_linkprop/"><img src="https://img.shields.io/badge/OGB-LinkPred-blue" alt="OGBL"></a>
-    <a href="https://github.com/Graph-COM/SUREL_PLUS/tree/main/subg_acc"><img src="https://img.shields.io/badge/SubGAcc-v2.1-orange" alt="Version"></a>
+    <a href="https://github.com/Graph-COM/SUREL_PLUS/tree/main/subg_acc"><img src="https://img.shields.io/badge/SubGAcc-v2.2-orange" alt="Version"></a>
     <a href="https://hits.seeyoufarm.com"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FGraph-COM%2FSUREL_Plus&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Hits&edge_flat=false"/></a>
 </p>
 
-SUREL+ is a novel set-based computation framework for scalable SGRL.
-It avoids the costly procedure of query-specific subgraph extraction while using sampled node sets whose join can be used as proxies of the subgraphs to make predictions. SUREL+ benefits from the reusability of these node sets across different queries, which substantially reduces memory/time consumption by avoiding having heavy node duplication in walk-based representation of SUREL.
+SUREL+ is a novel set-based computation framework for scalable SGRL. It decomposes the costly procedure of extracting query-specific subgraphs into multiple node set sampling. The join of these sampled node sets can then act as proxies for queried subgraphs to make predictions. 
+
+SUREL+ benefits from the reusability of sampled node sets across different queries, but substantially reduces both memory and computational cost by elimating heavy node duplication from walk sampling.
+
+SUREL+ designs dedicated sparse storage **SpG** and sparse join operation **SpJoin** to handle the size irregularity of node sets. It also adopts a modular design, where users can flexibly choose different combination of set samplers, structure encoders and set neural encoders for their own SGRL tasks.
 
 <p align="center"><img width="90%" height="90%" src="figures/surel_plus_main.png"></p> 
-
-SUREL+ designs dedicated sparse storage **SpG** and sparse join operation **SpJoin** to handle the irregularity of node sets. 
-SUREL+ also adopts a modular design, where users can flexibly choose among different set samplers, structure encoders and set neural encoders for their own SGRL tasks.
 
 Currently, SUREL+ framework supports:
 - Large-scale graph ML tasks: link prediction / relation prediction / higher-order pattern prediction
@@ -26,6 +26,12 @@ Currently, SUREL+ framework supports:
   - Neural Set Encoders: MLP+mean pooling, LSTM-based, Attention-based
 - Single GPU training and evaluation
 - Structural Features + Node Features
+
+## Updates ##
+**Mar. 1, 2023:**
+- support SubGAcc 2.2 and ogbl-vessel v1
+- better logger function
+- add model checkpoint and inference only mode
 
 ## Requirements ##
 (Other versions may work, but are untested)
@@ -66,46 +72,54 @@ For more details, please refer to the [PyTorch](https://pytorch.org/), [PyTorch 
 
 3. Build and install the [SubGAcc](https://github.com/VeritasYin/subg_acc) library `cd subg_acc;python3 setup.py install`
 
-- To train **SUREL+** for link prediction on Collab:
+- To train **SUREL+** for link prediction on `collab` with LP/LSTM:
 ```bash
-python main.py --dataset ogbl-collab --metric Hits --sencoder LP --num_steps 3 --num_walks 200 --aggr attn --use_val
+python main.py --dataset ogbl-collab --metric Hits --sencoder LP --num_steps 3 --num_walks 200 --aggr lstm --use_val
 ```
 
-- To train **SUREL+** for link prediction on Citation2:
+- To train **SUREL+** for link prediction on `ppa` with LP/Attn:
+
 ```bash
-python main.py --dataset ogbl-citation2 --metric MRR --sencoder ppr --topk 100  --aggr mean
+python main.py --dataset ogbl-ppa --metric Hits --sencoder LP --num_steps 4 --num_walks 200 --k 20 --aggr attn
 ```
 
-- To train **SUREL+** for relation type prediction on MAG(A-P):
+- To train **SUREL+** for link prediction on `citation2` with PPR/Mean:
 ```bash
-python main.py --dataset mag --relation write --metric MRR --sencoder LP --num_step 3 --num_walk 100 --k 10 
+python main.py --dataset ogbl-citation2 --metric MRR --sencoder PPR --topk 100  --aggr mean
 ```
 
-- To train **SUREL+** for higher-order pattern prediction on DBLP:
+- To train **SUREL+** for `vessel` prediction with LP/Mean:
 ```bash
-python main_horder.py --dataset DBLP-coauthor --metric mrr --num_step 3 --num_walk 100 
+python main.py --dataset ogbl-vessel --metric AUC --sencoder LP --num_steps 2 --num_walks 50 --k 5 --aggr mean --use_raw --dropout 0.2
 ```
 
-- All detailed training logs can be found at `<log_dir>/<dataset>/<training-time>.log`.
+- To train **SUREL+** for relation type prediction on `MAG(A-P)`:
+```bash
+python main.py --dataset mag --relation write --metric MRR --sencoder LP --num_steps 3 --num_walks 100
+```
+
+- To train **SUREL+** for higher-order pattern prediction on `DBLP`:
+```bash
+python main_horder.py --dataset DBLP-coauthor --metric MRR --num_steps 3 --num_walks 100 
+```
+
+- All detailed training logs can be found at `<log_dir>/<dataset>/<training-timestamp>.log`, and the saved checkpoint is under the `model` subfolder.
 
 
 ## Usage
 ```
-usage: main.py [-h] [--device DEVICE] [--log_steps LOG_STEPS]
-               [--num_layers NUM_LAYERS] [--hidden_channels HIDDEN_CHANNELS]
-               [--dropout DROPOUT] [--batch_size BATCH_SIZE] [--lr LR]
-               [--train_ratio TRAIN_RATIO] [--valid_perc VALID_PERC]
-               [--epochs EPOCHS] [--eval_steps EVAL_STEPS] [--runs RUNS]
-               [--alpha ALPHA] [--eps EPS] [--topk TOPK]
-               [--num_walks NUM_WALKS] [--num_steps NUM_STEPS] [--k K]
-               [--nthread NTHREAD]
+usage: main.py [-h] [--device DEVICE] [--log_steps LOG_STEPS] [--num_layers NUM_LAYERS]
+               [--hidden_channels HIDDEN_CHANNELS] [--dropout DROPOUT]
+               [--batch_size BATCH_SIZE] [--lr LR] [--train_ratio TRAIN_RATIO]
+               [--valid_perc VALID_PERC] [--epochs EPOCHS] [--eval_steps EVAL_STEPS]
+               [--early_stop EARLY_STOP] [--runs RUNS] [--seed SEED] [--alpha ALPHA]
+               [--eps EPS] [--topk TOPK] [--num_walks NUM_WALKS]
+               [--num_steps NUM_STEPS] [--k K] [--nthread NTHREAD]
                [--dataset {ogbl-ppa,ogbl-ddi,ogbl-citation2,ogbl-collab,ogbl-vessel,mag}]
                [--relation {write,cite}] [--metric {AUC,MRR,Hits}]
-               [--aggrs {mean,lstm,attn}] [--sencoder {LP,ppr,spd,deg}]
-               [--reduced] [--use_raw] [--use_node_embedding] [--use_weight]
-               [--use_val] [--load_ppr] [--save_ppr] [--log_dir LOG_DIR]
-               [--debug]
-
+               [--aggrs {mean,lstm,attn}] [--sencoder {LP,PPR,SPD,DEG}] [--use_raw]
+               [--use_weight] [--use_val] [--use_pretrain] [--load_ppr] [--save_ppr]
+               [--inf_only] [--log_dir LOG_DIR] [--load_model LOAD_MODEL] [--debug]
 ```
 
 <details>
@@ -125,7 +139,9 @@ optional arguments:
   --valid_perc VALID_PERC
   --epochs EPOCHS
   --eval_steps EVAL_STEPS
+  --early_stop EARLY_STOP
   --runs RUNS
+  --seed SEED           seed to initialize all the random modules
   --alpha ALPHA         teleport probability in PPR
   --eps EPS             precision of PPR approx
   --topk TOPK           sample size of node set
@@ -143,16 +159,18 @@ optional arguments:
                         metric for evaluating performance
   --aggrs {mean,lstm,attn}
                         type of set neural encoder
-  --sencoder {LP,ppr,spd,deg}
+  --sencoder {LP,PPR,SPD,DEG}
                         type of structure encoder
-  --reduced             whether to compress structural features
-  --use_raw             whether to use raw features as input
-  --use_node_embedding  whether to load node embedding
-  --use_weight          whether to use edge weight as input
-  --use_val             whether to use val as input
+  --use_raw             whether to use raw features
+  --use_weight          whether to use edge weight
+  --use_val             whether to use validation as input
+  --use_pretrain        whether to load pretrained embedding
   --load_ppr            whether to load precomputed ppr
   --save_ppr            whether to save calculated ppr
+  --inf_only            whether to perform inference only
   --log_dir LOG_DIR     log directory
+  --load_model LOAD_MODEL
+                        saved model path
   --debug               whether to use debug mode
 ```
 </details>
