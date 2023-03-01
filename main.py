@@ -1,9 +1,20 @@
+'''
+Author: Haoteng Yin
+Date: 2023-02-25 15:06:04
+LastEditors: VeritasYin
+LastEditTime: 2023-03-01 15:18:05
+FilePath: /SUREL_Plus/main.py
+
+Copyright (c) 2023 by VeritasYin, All Rights Reserved. 
+'''
 import argparse
 from ogb.linkproppred import Evaluator
 from scipy.sparse import save_npz, load_npz
-from random_walks import subg_matrix
-import time, sys
-import pprgo
+from sampler.random_walks import subg_matrix
+from sampler.pprgo import topk_ppr_matrix
+import time
+import sys
+
 
 from logger import Logger
 from dataloader import *
@@ -12,27 +23,35 @@ from train import *
 
 
 def main():
-    parser = argparse.ArgumentParser(description='SUREL+ Framework for Link / Relation Type Prediction)')
+    parser = argparse.ArgumentParser(description='SUREL+ Framework for Link / Relation Type Prediction')
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--log_steps', type=int, default=1)
     parser.add_argument('--num_layers', type=int, default=3)
     parser.add_argument('--hidden_channels', type=int, default=96)
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=1024)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--train_ratio', type=float, default=0.05)
     parser.add_argument('--valid_perc', type=int, default=100)
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--eval_steps', type=int, default=5)
-    parser.add_argument('--runs', type=int, default=5)
-    parser.add_argument('--seed', type=int, default=0, help='seed to initialize all the random modules')
-    parser.add_argument('--alpha', type=float, default=0.5, help='teleport probability in PPR')
-    parser.add_argument('--eps', type=float, default=0.0001, help='precision of PPR approx')
-    parser.add_argument('--topk', type=int, default=100, help='sample size of  node set')
-    parser.add_argument('--num_walks', type=int, default=200, help='number of walks')
-    parser.add_argument('--num_steps', type=int, default=4, help='step of walks')
+    parser.add_argument('--early_stop', type=int, default=-1)
+    parser.add_argument('--runs', type=int, default=1)
+    parser.add_argument('--seed', type=int, default=0,
+                        help='seed to initialize all the random modules')
+    parser.add_argument('--alpha', type=float, default=0.5,
+                        help='teleport probability in PPR')
+    parser.add_argument('--eps', type=float, default=0.0001,
+                        help='precision of PPR approx')
+    parser.add_argument('--topk', type=int, default=100,
+                        help='sample size of  node set')
+    parser.add_argument('--num_walks', type=int,
+                        default=100, help='number of walks')
+    parser.add_argument('--num_steps', type=int,
+                        default=4, help='step of walks')
     parser.add_argument('--k', type=int, default=10, help='negative samples')
-    parser.add_argument('--nthread', type=int, default=16, help='number of threads')
+    parser.add_argument('--nthread', type=int, default=16,
+                        help='number of threads')
     parser.add_argument('--dataset', type=str, default='ogbl-citation2', help='dataset name',
                         choices=['ogbl-ppa', 'ogbl-ddi', 'ogbl-citation2', 'ogbl-collab', 'ogbl-vessel', 'mag'])
     parser.add_argument('--relation', type=str, default='cite', help='relation type',
@@ -41,17 +60,28 @@ def main():
                         choices=['AUC', 'MRR', 'Hits'])
     parser.add_argument('--aggrs', type=str, default='mean', choices=['mean', 'lstm', 'attn'],
                         help='type of set neural encoder')
-    parser.add_argument('--sencoder', type=str, default='LP', choices=['LP', 'ppr', 'spd', 'deg'],
+    parser.add_argument('--sencoder', type=str, default='LP', choices=['LP', 'PPR', 'SPD', 'DEG'],
                         help='type of structure encoder')
-    parser.add_argument('--reduced', action='store_true', help='whether to compress structural features')
-    parser.add_argument('--use_raw', action='store_true', help='whether to use raw features as input')
-    parser.add_argument('--use_node_embedding', action='store_true', help='whether to load node embedding')
-    parser.add_argument('--use_weight', action='store_true', help='whether to use edge weight as input')
-    parser.add_argument('--use_val', action='store_true', help='whether to use val as input')
-    parser.add_argument('--load_ppr', action='store_true', help='whether to load precomputed ppr')
-    parser.add_argument('--save_ppr', action='store_true', help='whether to save calculated ppr')
-    parser.add_argument('--log_dir', type=str, default='./log/', help='log directory')
-    parser.add_argument('--debug', default=False, action='store_true', help='whether to use debug mode')
+    parser.add_argument('--use_raw', action='store_true',
+                        help='whether to use raw features')
+    parser.add_argument('--use_weight', action='store_true',
+                        help='whether to use edge weight')
+    parser.add_argument('--use_val', action='store_true',
+                        help='whether to use validation as input')
+    parser.add_argument('--use_pretrain', action='store_true',
+                        help='whether to load pretrained embedding')
+    parser.add_argument('--load_ppr', action='store_true',
+                        help='whether to load precomputed ppr')
+    parser.add_argument('--save_ppr', action='store_true',
+                        help='whether to save calculated ppr')
+    parser.add_argument('--inf_only', action='store_true',
+                        help='whether to perform inference only')
+    parser.add_argument('--log_dir', type=str,
+                        default='./log/', help='log directory')
+    parser.add_argument('--load_model', type=str,
+                        default=None, help='saved model path')
+    parser.add_argument('--debug', default=False,
+                        action='store_true', help='whether to use debug mode')
 
     sys_argv = sys.argv
     try:
@@ -65,7 +95,6 @@ def main():
     alpha = args.alpha
     topk = args.topk
     eps = args.eps
-    args.reduced = True
 
     # customized for each dataset
     if 'ddi' in args.dataset:
@@ -84,32 +113,20 @@ def main():
         args.use_raw = True
         args.metric = 'AUC'
     elif 'mag' in args.dataset:
-        args.metrc = 'MRR'
+        args.metric = 'MRR'
     else:
         raise NotImplementedError
 
     # setup logger and tensorboard
 
-    if 'MRR' in args.metric:
-        rlog = Logger(args.runs, args)
-    elif 'Hits' in args.metric:
-        rlogs = {
-            'Hits@10': Logger(args.runs, args),
-            'Hits@50': Logger(args.runs, args),
-            'Hits@100': Logger(args.runs, args),
-        }
-        rlog = rlogs[args.metric]
-    elif 'AUC' in args.metric:
-        rlog = Logger(args.runs, args)
-    else:
-        raise NotImplementedError
-
-    logger = rlog.set_up_log(args, sys_argv)
+    rlog = Logger(args)
+    logger = rlog.set_up_log(sys_argv)
     if args.nthread > 0:
         torch.set_num_threads(args.nthread)
     logger.info(f"torch num_threads {torch.get_num_threads()}")
 
-    device = torch.device(f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(
+        f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
 
     if 'mag' in args.dataset:
         data = DEH_Dataset(args.dataset, args.relation)
@@ -124,19 +141,23 @@ def main():
 
     train_edge = (data.pos_edge.t(), data.neg_edge.t())
     if 'mag' in args.dataset:
-        val_edge = get_pos_neg_edges('valid', data.split_edge, data.split_edge['train']['edge'], data.num_nodes)
-        test_edge = get_pos_neg_edges('test', data.split_edge, data.split_edge['train']['edge'], data.num_nodes)
+        val_edge = get_pos_neg_edges(
+            'valid', data.split_edge, data.split_edge['train']['edge'], data.num_nodes)
+        test_edge = get_pos_neg_edges(
+            'test', data.split_edge, data.split_edge['train']['edge'], data.num_nodes)
     else:
         val_edge = get_pos_neg_edges('valid', data.split_edge, data.graph.edge_index, data.graph.num_nodes,
                                      percent=args.valid_perc)
-        test_edge = get_pos_neg_edges('test', data.split_edge, data.graph.edge_index, data.num_nodes)
+        test_edge = get_pos_neg_edges(
+            'test', data.split_edge, data.graph.edge_index, data.num_nodes)
     inf_edge = {'train': train_edge, 'valid': val_edge, 'test': test_edge}
 
     if args.use_raw:
         embed = data.graph.x
-        if args.use_node_embedding:
-            embedding = torch.load('embedding.pt', map_location='cpu')
-            embed = torch.cat([embed, embedding], dim=-1)
+        if args.use_pretrain:
+            embed_pretrain = torch.load(
+                'pretrain_embedding.pt', map_location='cpu')
+            embed = torch.cat([embed, embed_pretrain], dim=-1)
         embed = embed.to(device).float()
     else:
         embed = None
@@ -148,15 +169,17 @@ def main():
     inf_idx = np.arange(G_inf.shape[0])
     if args.sencoder == 'LP':
         # obtain node sets and LP for training
-        x, xpe = subg_matrix(G_obsrv, train_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
+        x, xpe = subg_matrix(
+            G_obsrv, train_idx, num_walks=args.num_walks, num_steps=args.num_steps)
+        xpe = torch.from_numpy(xpe).to(device).float() / args.num_walks
         # obtain node sets and LP for inference
-        z, zpe = subg_matrix(G_inf, inf_idx, num_walks=args.num_walks, num_steps=args.num_steps, reduced=args.reduced)
-        if args.reduced:
-            xpe = torch.from_numpy(xpe).to(device).float() / args.num_walks
-            zpe = torch.from_numpy(zpe).to(device).float() / args.num_walks
-            logger.info(f'Encoding Size {xpe.shape}, {zpe.shape}')
+        z, zpe = subg_matrix(
+            G_inf, inf_idx, num_walks=args.num_walks, num_steps=args.num_steps)
+        zpe = torch.from_numpy(zpe).to(device).float() / args.num_walks
+        logger.info(f'LP Encoding Size {xpe.shape}, {zpe.shape}')
     else:
-        x = pprgo.topk_ppr_matrix(G_obsrv, alpha, eps, train_idx, topk, normalization='sym')
+        x = topk_ppr_matrix(
+            G_obsrv, alpha, eps, train_idx, topk, normalization='sym')
         x, xpe = encoding(x, G_obsrv, args.sencoder)
         if args.load_ppr:
             z_path = f'{args.dataset}_z_{alpha}_{topk}_{eps}.npz'
@@ -167,11 +190,12 @@ def main():
                 sys.exit(0)
         else:
             # compute the ppr vectors for train/val nodes using ACL's ApproximatePR
-            z = pprgo.topk_ppr_matrix(G_inf, alpha, eps, inf_idx, topk, normalization='sym')
+            z = topk_ppr_matrix(
+                G_inf, alpha, eps, inf_idx, topk, normalization='sym')
             z, zpe = encoding(z, G_inf, args.sencoder)
         args.num_steps = 1
     time_prep = time.time() - prep_start
-    logger.info(f"Encoding {args.sencoder} Runtime: {time_prep:.2f}s")
+    logger.info(f"Prep. Runtime ({args.sencoder}): {time_prep:.2f}s")
     del graphs
 
     if args.save_ppr:
@@ -182,13 +206,26 @@ def main():
 
     logger.info(f'#Model Params {sum(p.numel() for p in predictor.parameters())}')
 
-    evaluator = Evaluator(name=args.dataset) if 'mag' not in args.dataset else Evaluator(name='ogbl-citation2')
+    evaluator = Evaluator(name=args.dataset) if 'mag' not in args.dataset else Evaluator(
+        name='ogbl-citation2')
 
     train_edges = torch.cat(train_edge, dim=1)
-    y = torch.cat([torch.ones(train_edge[0].size(1)), torch.zeros(train_edge[1].size(1))]).to(device)
+    y = torch.cat([torch.ones(train_edge[0].size(1)),
+                  torch.zeros(train_edge[1].size(1))]).to(device)
 
     # LSTM-based encoder needs the size of various squeezes for aggregation
     ptr = True if args.aggrs != 'lstm' else False
+
+    inf_func = 'inference_mrr' if 'MRR' in args.metric else 'inference'
+
+    if args.inf_only and args.load_model:
+        load_checkpoint(f'{rlog.save_path}/{args.load_model}', predictor)
+        sta = time.time()
+        results, d_inf = eval(inf_func)(predictor, x, z, inf_edge, evaluator, args.batch_size, device, ptr=ptr,
+                                        rpe=[xpe, zpe], metric=args.metric)
+        f_output(results, args.metric, logger)
+        logger.info(f'T_inf {time.time() - sta:.2f}, T_test {d_inf:.2f}')
+        sys.exit(0)
 
     for run in range(args.runs):
         predictor.reset_parameters()
@@ -201,57 +238,24 @@ def main():
 
             if epoch % args.eval_steps == 0:
                 sta = time.time()
-                if 'MRR' in args.metric:
-                    results, d_inf = inference_mrr(predictor, x, z, inf_edge, evaluator, args.batch_size*args.k, device, ptr=ptr,
-                                            rpe=[xpe, zpe])
-                else:
-                    results, d_inf = inference(predictor, x, z, inf_edge, evaluator, args.batch_size*args.k, device,
-                                        ptr=ptr, feature=embed, rpe=[xpe, zpe], metric=args.metric)
-                dt = time.time() - sta
-
+                results, d_inf = eval(inf_func)(predictor, x, z, inf_edge, evaluator, args.batch_size, device,
+                                                ptr=ptr, feature=embed, rpe=[xpe, zpe], metric=args.metric)
                 if epoch % args.log_steps == 0:
-                    if 'Hits' in args.metric:
-                        for key, result in results.items():
-                            train_hits, valid_hits, test_hits = result
-                            logger.info(key)
-                            logger.info(f'Run: {run + 1:02d}, '
-                                        f'Epoch: {epoch:02d}, '
-                                        f'Loss: {loss:.4f}, '
-                                        f'Valid: {100 * valid_hits:.2f}%, '
-                                        f'Test: {100 * test_hits:.2f}%')
-                    else:
-                        train_mrr, valid_mrr, test_mrr = results
-                        logger.info(f'Run: {run + 1:02d}, '
-                                    f'Epoch: {epoch:02d}, '
-                                    f'Loss: {loss:.4f}, '
-                                    f'Valid: {valid_mrr:.4f}, '
-                                    f'Test: {test_mrr:.4f}')
-                    logger.info(f'T_inf {dt:.2f}, T_test {d_inf:.2f}')
+                    logger.info(f'Run: {run + 1:02d}, Epoch: {epoch:02d}, Loss: {loss:.4f}')
+                    f_output(results, args.metric, logger)
+                    logger.info(f'T_inf {time.time() - sta:.2f}, T_test {d_inf:.2f}')
                     logger.info('---')
 
-                if 'Hits' in args.metric:
-                    dic = {}
-                    for key, result in results.items():
-                        dic[key] = rlogs[key].add_result(run, result)
-                    if dic[args.metric]:
-                        break
-                else:
-                    if rlog.add_result(run, results):
-                        break
+                if rlog.add_result(run, results):
+                    checkpoint = {'state_dict': predictor.state_dict(),
+                                  'optimizer': optimizer.state_dict(),
+                                  'epoch': epoch}
+                    save_checkpoint(checkpoint, filename=f'{rlog.save_path}/{args.stamp}_{run}')
+                    break
 
-        if args.metric in ['MRR', 'AUC']:
-            rlog.print_statistics(run=run, logger=logger)
-        else:
-            for key in rlogs.keys():
-                logger.info(key)
-                rlogs[key].print_statistics(run=run, logger=logger)
-
-    if args.metric in ['MRR', 'AUC']:
+        rlog.print_statistics(run=run, logger=logger)
+    if args.runs > 1:
         rlog.print_statistics(logger=logger)
-    else:
-        for key in rlogs.keys():
-            logger.info(key)
-            rlogs[key].print_statistics(logger=logger)
 
 
 if __name__ == "__main__":

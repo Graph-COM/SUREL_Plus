@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -47,11 +44,12 @@ class HONet(torch.nn.Module):
         super(HONet, self).__init__()
         self.dropout = dropout
         self.x_dim = x_dim
-        self.enc = 'LP'  # landing prob at [0, 1, ... num_layers]
+        self.enc = 'LP'
 
         self.pe_embedding = nn.Sequential(nn.Linear(in_features=input_dim, out_features=hidden_dim),
                                           nn.ReLU(), nn.Linear(in_features=hidden_dim, out_features=hidden_dim))
-        self.affinity_score = MergeLayer(hidden_dim, hidden_dim, out_dim, non_linear=True, dropout=dropout)
+        self.affinity_score = MergeLayer(
+            hidden_dim, hidden_dim, out_dim, non_linear=True, dropout=dropout)
         self.concat_norm = nn.LayerNorm(hidden_dim * 2)
 
     def forward(self, x, ind, feature=None, debug=None):

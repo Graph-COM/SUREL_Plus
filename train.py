@@ -7,6 +7,8 @@ from sklearn.metrics import roc_auc_score
 import threading
 import time
 
+NCOL = 72
+
 
 def gather(edge, x, device, ptr=True, encode=None):
     # obtain subgraph neighbors of left and right endpoints
@@ -16,13 +18,15 @@ def gather(edge, x, device, ptr=True, encode=None):
 
     # keep index for set aggregation
     if ptr:
-        indptr = torch.from_numpy(np.concatenate([xl.indptr[:-1], xl.indptr[-1] + xr.indptr])).long().to(device)
+        indptr = torch.from_numpy(np.concatenate(
+            [xl.indptr[:-1], xl.indptr[-1] + xr.indptr])).long().to(device)
     else:
         # obtain neighborhood size
-        lsize, rsize = torch.from_numpy(lmask.getnnz(axis=1)).long(), torch.from_numpy(rmask.getnnz(axis=1)).long()
+        lsize, rsize = torch.from_numpy(lmask.getnnz(axis=1)).long(
+        ), torch.from_numpy(rmask.getnnz(axis=1)).long()
         # generate index
-        lind, rind = torch.arange(len(lsize), dtype=torch.long).repeat_interleave(lsize).to(device), torch.arange(
-            len(lsize), 2 * len(lsize), dtype=torch.long).repeat_interleave(rsize).to(device)
+        lind, rind = torch.arange(len(lsize), dtype=torch.long).repeat_interleave(lsize).to(device), \
+            torch.arange(len(lsize), 2 * len(lsize), dtype=torch.long).repeat_interleave(rsize).to(device)
         indptr = torch.cat([lind, rind])
     # join ops, x+y*x_mask
 
@@ -32,8 +36,10 @@ def gather(edge, x, device, ptr=True, encode=None):
         xr = np.stack([xr.data, xlr.data - 1]).T
         xz = encode[np.vstack([xl, xr])]
     else:
-        xl = torch.from_numpy(np.stack([xl.data, xrl.data - 1]).T).float().to(device)
-        xr = torch.from_numpy(np.stack([xr.data, xlr.data - 1]).T).float().to(device)
+        xl = torch.from_numpy(
+            np.stack([xl.data, xrl.data - 1]).T).float().to(device)
+        xr = torch.from_numpy(
+            np.stack([xr.data, xlr.data - 1]).T).float().to(device)
         xz = torch.cat([xl, xr]).unsqueeze(dim=-1)
 
     return xz, indptr
@@ -49,7 +55,8 @@ def hgather(hedge, x, device, encode=None):
         vmask.getnnz(axis=1)).long(), torch.from_numpy(wmask.getnnz(axis=1)).long()
     # keep index for segment aggregation
     node_size = torch.cat([usize, wsize, vsize, wsize])
-    ind = torch.arange(len(usize) * 4, dtype=torch.long).repeat_interleave(node_size).to(device)
+    ind = torch.arange(
+        len(usize) * 4, dtype=torch.long).repeat_interleave(node_size).to(device)
     # join ops, x*y_mask+
     xwu, xuw = xw.multiply(umask) + umask, xu.multiply(wmask) + wmask
     xwv, xvw = xw.multiply(vmask) + vmask, xv.multiply(wmask) + wmask
@@ -92,13 +99,15 @@ def pgather(edge, M, device, encode, gather_func, ptr=True, njobs=4):
         th.join()
 
     if njobs > 1:
-        xz = encode[np.vstack([*out_blocks[:, 0], *out_blocks[:, 1]])]
-        indptr = torch.from_numpy(np.concatenate([[0], *out_blocks[:, 2], *out_blocks[:, 3]])).long()
-        if ptr:  
+        xz = np.vstack([*out_blocks[:, 0], *out_blocks[:, 1]])
+        xz = encode[xz] if encode is not None else torch.from_numpy(xz).float().to(device).unsqueeze(dim=-1)
+        indptr = torch.from_numpy(np.concatenate(
+            [[0], *out_blocks[:, 2], *out_blocks[:, 3]])).long()
+        if ptr:
             return xz, indptr.cumsum(dim=0).to(device)
         else:
             return xz, torch.arange(len(indptr)-1, dtype=torch.long).repeat_interleave(indptr[1:]).to(device)
-            
+
     return out_blocks
 
 
@@ -108,7 +117,7 @@ def train(predictor, g, edges, label, optimizer, batch_size, device, k, ptr=True
     total_loss = 0
     total_sample = 0
     labels, preds = [], []
-    pbar = tqdm(DataLoader(range(edges.size(1)), batch_size, shuffle=True))
+    pbar = tqdm(DataLoader(range(edges.size(1)), batch_size, shuffle=True), ncols=NCOL)
     for perm in pbar:
         optimizer.zero_grad()
         edge = edges[:, perm]
@@ -136,11 +145,12 @@ def htrain(predictor, g, train_edge, optimizer, batch_size, device, k, feature=N
     pos_train_edge, neg_train_edge = train_edge
 
     edges = torch.cat(train_edge, dim=1)
-    label = torch.cat([torch.ones(pos_train_edge.size(1)), torch.zeros(neg_train_edge.size(1))]).to(device)
+    label = torch.cat([torch.ones(pos_train_edge.size(1)),
+                      torch.zeros(neg_train_edge.size(1))]).to(device)
     total_loss = 0
     total_sample = 0
     labels, preds = [], []
-    pbar = tqdm(DataLoader(range(edges.size(1)), batch_size, shuffle=True))
+    pbar = tqdm(DataLoader(range(edges.size(1)), batch_size, shuffle=True), ncols=NCOL)
     for perm in pbar:
         optimizer.zero_grad()
         edge = edges[:, perm]
@@ -163,15 +173,14 @@ def htrain(predictor, g, train_edge, optimizer, batch_size, device, k, feature=N
 
 
 @torch.no_grad()
-def inference(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True, feature=None, rpe=None,
-              metric='Hits'):
+def inference(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True, feature=None, rpe=None, metric='Hits'):
     predictor.eval()
 
     def test_split(split, embed, encode):
         print(f'Inf {split}')
         pos_edge, neg_edge = inf_edge[split]
         pos_preds = []
-        for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size)):
+        for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size), ncols=NCOL):
             edge = pos_edge[:, perm]
             x_inf, ind = gather(edge, embed, device, ptr=ptr, encode=encode)
             z = feature[edge] if feature is not None else None
@@ -180,9 +189,10 @@ def inference(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True
 
         if split != 'train':
             neg_preds = []
-            for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size)):
+            for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size), ncols=NCOL):
                 edge = neg_edge[:, perm]
-                x_inf, ind = gather(edge, embed, device, ptr=ptr, encode=encode)
+                x_inf, ind = gather(edge, embed, device,
+                                    ptr=ptr, encode=encode)
                 z = feature[edge] if feature is not None else None
                 neg_preds += [predictor(x_inf, ind, feature=z).squeeze()]
             neg_pred = torch.cat(neg_preds, dim=0).sigmoid()
@@ -233,7 +243,7 @@ def inference(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True
 
 
 @torch.no_grad()
-def inference_mrr(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True, feature=None, rpe=None):
+def inference_mrr(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=True, feature=None, rpe=None, metric=None):
     predictor.eval()
 
     def test_split(split, embed, encode):
@@ -244,14 +254,14 @@ def inference_mrr(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=
         k = neg_edge.size(1) // pos_edge.size(1)
 
         pos_preds = []
-        for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size)):
+        for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size), ncols=NCOL):
             edge = pos_edge[:, perm]
             x_inf, ind = pgather(edge, embed, device, encode, bgather, ptr=ptr)
             pos_preds += [predictor(x_inf, ind).squeeze()]
         pos_pred = torch.cat(pos_preds, dim=0).sigmoid()
 
         neg_preds = []
-        for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size)):
+        for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size), ncols=NCOL):
             edge = neg_edge[:, perm]
             x_inf, ind = pgather(edge, embed, device, encode, bgather, ptr=ptr)
             neg_preds += [predictor(x_inf, ind).squeeze()]
@@ -267,8 +277,7 @@ def inference_mrr(predictor, x, z, inf_edge, evaluator, batch_size, device, ptr=
     valid_mrr = test_split('valid', z, zpe)
     sta = time.time()
     test_mrr = test_split('test', z, zpe)
-    t_inf = time.time() - sta
-    return (0, valid_mrr, test_mrr), t_inf
+    return (0, valid_mrr, test_mrr), time.time() - sta
 
 
 @torch.no_grad()
@@ -283,14 +292,14 @@ def eval_model_horder(predictor, x, inf_edge, evaluator, batch_size, device, fea
         k = neg_edge.size(1) // pos_edge.size(1)
 
         pos_preds = []
-        for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size)):
+        for perm in tqdm(DataLoader(range(pos_edge.size(1)), batch_size), ncols=NCOL):
             edge = pos_edge[:, perm]
             x_inf, ind = hgather(edge, embed, device, encode=encode)
             pos_preds += [predictor(x_inf, ind).squeeze()]
         pos_pred = torch.cat(pos_preds, dim=0).sigmoid()
 
         neg_preds = []
-        for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size)):
+        for perm in tqdm(DataLoader(range(neg_edge.size(1)), batch_size), ncols=NCOL):
             edge = neg_edge[:, perm]
             x_inf, ind = hgather(edge, embed, device, encode=encode)
             neg_preds += [predictor(x_inf, ind).squeeze()]
@@ -303,5 +312,6 @@ def eval_model_horder(predictor, x, inf_edge, evaluator, batch_size, device, fea
 
     #     train_mrr = test_split('train', x, rpe)
     valid_mrr = test_split('valid', x, rpe)
+    sta = time.time()
     test_mrr = test_split('test', x, rpe)
-    return 0, valid_mrr, test_mrr
+    return (0, valid_mrr, test_mrr), time.time() - sta
