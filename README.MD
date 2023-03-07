@@ -1,7 +1,7 @@
 <h1 align="center">SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning</h1>
 
 <p align="center">
-    <a href="https://github.com/Graph-COM/SUREL_Plus/blob/main/manuscript/SUREL_Plus_Full.pdf"><img src="https://img.shields.io/badge/-Paper-grey?logo=read%20the%20docs&logoColor=green" alt="Paper"></a>
+    <a href="https://arxiv.org/pdf/2303.03379.pdf"><img src="https://img.shields.io/badge/-Paper-grey?logo=read%20the%20docs&logoColor=green" alt="Paper"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus"><img src="https://img.shields.io/badge/-Github-grey?logo=github" alt="Github"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSD%202--Clause-red.svg"></a>
     <a href="https://ogb.stanford.edu/docs/leader_linkprop/"><img src="https://img.shields.io/badge/OGB-LinkPred-blue" alt="OGBL"></a>
@@ -13,7 +13,7 @@ SUREL+ is a novel set-based computation framework for scalable SGRL. It decompos
 
 SUREL+ benefits from the reusability of sampled node sets across different queries, but substantially reduces both memory and computational cost by elimating heavy node duplication from walk sampling.
 
-SUREL+ designs dedicated sparse storage **SpG** and sparse join operation **SpJoin** to handle the size irregularity of node sets. It also adopts a modular design, where users can flexibly choose different combination of set samplers, structure encoders and set neural encoders for their own SGRL tasks.
+SUREL+ designs a dedicated sparse storage **SpG** and a sparse join operator **SpJoin** to handle the size irregularity of node sets. It also adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders for their own SGRL tasks.
 
 <p align="center"><img width="90%" height="90%" src="figures/surel_plus_main.png"></p> 
 
@@ -29,7 +29,7 @@ Currently, SUREL+ framework supports:
 
 ## Updates ##
 **Mar. 1, 2023:**
-- support SubGAcc 2.2 and ogbl-vessel v1
+- support SubGAcc v2.2 and ogbl-vessel v1
 - better logger function
 - add model checkpoint and inference only mode
 
