@@ -28,6 +28,12 @@ Currently, SUREL+ framework supports:
 - Structural Features + Node Features
 
 ## Updates ##
+**May 15, 2023:**
+- support SubGAcc v2.3 for billion-edge graphs
+- add two industry-level graph benchmarks
+        - [criteo-click](https://purdue.box.com/v/SGRLDataCriteoClick) with 16.5M records of online banner ads clicking
+        - [twitter-follower](https://purdue.box.com/v/SGRLDataTwitterFollower) with 1.5B following relations of users
+
 **Mar. 1, 2023:**
 - support SubGAcc v2.2 and ogbl-vessel v1
 - better logger function
