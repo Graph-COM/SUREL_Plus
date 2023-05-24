@@ -9,17 +9,17 @@
     <a href="https://hits.seeyoufarm.com"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FGraph-COM%2FSUREL_Plus&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Hits&edge_flat=false"/></a>
 </p>
 
-SUREL+ is a novel set-based computation framework for scalable SGRL. It decomposes the costly procedure of extracting query-specific subgraphs into multiple node set sampling. The join of these sampled node sets can then act as proxies for queried subgraphs to make predictions. 
+SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL is successfully deployed on billion-edge graphs. SUREL+ decomposes costly query-specific subgraph extraction into multiple node-level set sampling, where their joint set can act as proxies of queried subgraphs to make predictions for multiple queries.
 
-SUREL+ benefits from the reusability of sampled node sets across different queries, but substantially reduces both memory and computational cost by elimating heavy node duplication from walk sampling.
+SUREL+ benefits from the reusability of sampled node sets across different queries, and its set form substantially reduces both memory and computational cost by eliminating heavy node duplication from walk-based sampling.
 
-SUREL+ designs a dedicated sparse storage **SpG** and a sparse join operator **SpJoin** to handle the size irregularity of node sets. It also adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders for their own SGRL tasks.
+SUREL+ designs a dedicated sparse storage **SpG** and a sparse join operator **SpJoin** to handle the irregular-sized node sets. It adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders to suit their own SGRL tasks.
 
 <p align="center"><img width="90%" height="90%" src="figures/surel_plus_main.png"></p> 
 
 Currently, SUREL+ framework supports:
-- Large-scale graph ML tasks: link prediction / relation prediction / higher-order pattern prediction
-- Preprocessing and training on seven datasets in Open Graph Benchmark ([OGB](https://ogb.stanford.edu/docs/home/)) format
+- Large-scale graph ML tasks: link prediction / relation-type prediction / higher-order pattern prediction
+- Preprocessing and training on nine datasets in Open Graph Benchmark ([OGB](https://ogb.stanford.edu/docs/home/)) format
 - Flexible modules:
   - Set Samplers: walk-based, metric-based
   - Structure Encoders: Landing Probabilities, Shortest Path Distance, PPR scores
@@ -31,11 +31,11 @@ Currently, SUREL+ framework supports:
 **May 15, 2023:**
 - support SubGAcc v2.3 for billion-edge graphs
 - add two industry-level graph benchmarks
-        - [criteo-click](https://purdue.box.com/v/SGRLDataCriteoClick) with 16.5M records of online banner ads clicking
-        - [twitter-follower](https://purdue.box.com/v/SGRLDataTwitterFollower) with 1.5B following relations of users
+  * [criteo-click](https://purdue.box.com/v/SGRLDataCriteoClick) with 16.5M records of online banner ads clicking
+  * [twitter-follower](https://purdue.box.com/v/SGRLDataTwitterFollower) with 1.5B following relations of users
 
 **Mar. 1, 2023:**
-- support SubGAcc v2.2 and ogbl-vessel v1
+- support SubGAcc v2.2 and ogbl-vessel v1.1
 - better logger function
 - add model checkpoint and inference only mode
 
