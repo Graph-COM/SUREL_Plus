@@ -9,11 +9,9 @@
     <a href="https://hits.seeyoufarm.com"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FGraph-COM%2FSUREL_Plus&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Hits&edge_flat=false"/></a>
 </p>
 
-SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL has been successfully deployed on billion-edge graphs. SUREL+ breaks costly subgraph extraction into sampling multiple node sets, where their joint set can act as a proxy o query-induced subgraphs for predictions of multiple queries. For more details, please refer to our paper [SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning](https://arxiv.org/pdf/2303.03379.pdf), to appear in VLDB'23.
+SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL has been successfully deployed on billion-edge graphs. SUREL+ breaks costly subgraph extraction into sampling multiple node sets, where their joint set can act as a proxy of query-induced subgraphs for predictions of multiple queries. For more details, please refer to our paper [SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning](https://arxiv.org/pdf/2303.03379.pdf), to appear in VLDB'23.
 
-SUREL+ benefits from the reusability of sampled node sets across different queries (e.g., link, motif), and its set form substantially reduces both memory and computational cost by eliminating heavy node duplication from walk-based sampling.
-
-SUREL+ designs dedicated sparse storage **SpG** and a sparse join operator **SpJoin** to handle the irregular-sized node sets. It adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders to suit their own SGRL tasks.
+SUREL+ benefits from the reusability of sampled node sets across different queries (e.g., link, motif), and its set form substantially reduces both memory and computational cost by eliminating heavy node duplication from walk-based sampling. SUREL+ designs dedicated sparse storage **SpG** and a sparse join operator **SpJoin**to handle the irregular-sized node sets. It adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders to suit their own SGRL tasks.
 
 <p align="center"><img width="90%" height="90%" src="figures/surel_plus_main.png"></p> 
 
