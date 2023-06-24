@@ -9,20 +9,20 @@
     <a href="https://hits.seeyoufarm.com"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FGraph-COM%2FSUREL_Plus&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Hits&edge_flat=false"/></a>
 </p>
 
-SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL is successfully deployed on billion-edge graphs. SUREL+ decomposes costly query-specific subgraph extraction into multiple node-level set sampling, where their joint set can act as proxies of queried subgraphs to make predictions for multiple queries.
+SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL has been successfully deployed on billion-edge graphs. SUREL+ breaks costly subgraph extraction into sampling multiple node sets, where their joint set can act as a proxy o query-induced subgraphs for predictions of multiple queries. For more details, please refer to our paper [SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning](https://arxiv.org/pdf/2303.03379.pdf), to appear in VLDB'23.
 
-SUREL+ benefits from the reusability of sampled node sets across different queries, and its set form substantially reduces both memory and computational cost by eliminating heavy node duplication from walk-based sampling.
+SUREL+ benefits from the reusability of sampled node sets across different queries (e.g., link, motif), and its set form substantially reduces both memory and computational cost by eliminating heavy node duplication from walk-based sampling.
 
-SUREL+ designs a dedicated sparse storage **SpG** and a sparse join operator **SpJoin** to handle the irregular-sized node sets. It adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders to suit their own SGRL tasks.
+SUREL+ designs dedicated sparse storage **SpG** and a sparse join operator **SpJoin** to handle the irregular-sized node sets. It adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders to suit their own SGRL tasks.
 
 <p align="center"><img width="90%" height="90%" src="figures/surel_plus_main.png"></p> 
 
-Currently, SUREL+ framework supports:
+Currently, SUREL+ framework supports the following:
 - Large-scale graph ML tasks: link prediction / relation-type prediction / higher-order pattern prediction
 - Preprocessing and training on nine datasets in Open Graph Benchmark ([OGB](https://ogb.stanford.edu/docs/home/)) format
 - Flexible modules:
-  - Set Samplers: walk-based, metric-based
-  - Structure Encoders: Landing Probabilities, Shortest Path Distance, PPR scores
+  - Set Samplers: walk-based, metric-based (PPR)
+  - Structure Encoders: Landing Probabilities, Shortest Path Distances, PPR scores
   - Neural Set Encoders: MLP+mean pooling, LSTM-based, Attention-based
 - Single GPU training and evaluation
 - Structural Features + Node Features
@@ -37,10 +37,10 @@ Currently, SUREL+ framework supports:
 **Mar. 1, 2023:**
 - support SubGAcc v2.2 and ogbl-vessel v1.1
 - better logger function
-- add model checkpoint and inference only mode
+- add model checkpoint and inference-only mode
 
 ## Requirements ##
-(Other versions may work, but are untested)
+(Other versions may work but are untested)
 * Ubuntu 20.04
 * CUDA >= 11.3
 * python >= 3.8
@@ -55,13 +55,13 @@ Requirements: Python >= 3.8, [Anaconda3](https://www.anaconda.com/)
 conda update -n base -c defaults conda
 ```
 
-- Install basic dependencies to virtual environment and activate it: 
+- Install basic dependencies to the virtual environment and activate it: 
 ```bash
 conda env create -f environment.yml
 conda activate sgrl-env
 ```
 
-- Update: SUREL now support PyTorch 1.12.1 and PyG 2.2.0 with pyg-lib. To install them, simply run
+- Update: SUREL now supports PyTorch 1.12.1 and PyG 2.2.0 with pyg-lib. To install them, simply run
 ```bash
 conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
 conda install pyg -c pyg
@@ -72,7 +72,7 @@ For more details, please refer to the [PyTorch](https://pytorch.org/), [PyTorch 
 
 ## Quick Start
 
-1. Install required version of PyTorch that is compatible with your CUDA driver
+1. Install the required version of PyTorch that is compatible with your CUDA driver
 
 2. Clone the repository `git clone https://github.com/Graph-COM/SUREL_Plus.git`
 
@@ -180,3 +180,15 @@ optional arguments:
   --debug               whether to use debug mode
 ```
 </details>
+
+## Citation
+Please cite our paper if you are interested in our work.
+```
+@article{yin2023surel+,
+  title={SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning},
+  author={Yin, Haoteng and Zhang, Muhan and Wang, Jianguo and Li, Pan},
+  journal={Proceedings of the VLDB Endowment},
+  volume={16},
+  year={2023}
+}
+```
