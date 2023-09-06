@@ -1,7 +1,7 @@
 <h1 align="center">SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning</h1>
 
 <p align="center">
-    <a href="https://arxiv.org/pdf/2303.03379.pdf"><img src="https://img.shields.io/badge/-Paper-grey?logo=read%20the%20docs&logoColor=green" alt="Paper"></a>
+    <a href="https://www.vldb.org/pvldb/vol16/p2939-yin.pdf"><img src="https://img.shields.io/badge/-Paper-grey?logo=read%20the%20docs&logoColor=green" alt="Paper"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus"><img src="https://img.shields.io/badge/-Github-grey?logo=github" alt="Github"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSD%202--Clause-red.svg"></a>
     <a href="https://ogb.stanford.edu/docs/leader_linkprop/"><img src="https://img.shields.io/badge/OGB-LinkPred-blue" alt="OGBL"></a>
@@ -187,6 +187,8 @@ Please cite our paper if you are interested in our work.
   author={Yin, Haoteng and Zhang, Muhan and Wang, Jianguo and Li, Pan},
   journal={Proceedings of the VLDB Endowment},
   volume={16},
+  number={11},
+  pages={2939-2948},
   year={2023}
 }
 ```
