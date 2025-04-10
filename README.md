@@ -1,15 +1,14 @@
 <h1 align="center">SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning</h1>
 
 <p align="center">
-    <a href="https://www.vldb.org/pvldb/vol16/p2939-yin.pdf"><img src="https://img.shields.io/badge/-Paper-grey?logo=read%20the%20docs&logoColor=green" alt="Paper"></a>
+    <a href="https://www.vldb.org/pvldb/vol16/p2939-yin.pdf"><img src="https://img.shields.io/badge/arXiv-2303.03379-b31b1b.svg"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus"><img src="https://img.shields.io/badge/-Github-grey?logo=github" alt="Github"></a>
     <a href="https://github.com/Graph-COM/SUREL_Plus/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSD%202--Clause-red.svg"></a>
     <a href="https://ogb.stanford.edu/docs/leader_linkprop/"><img src="https://img.shields.io/badge/OGB-LinkPred-blue" alt="OGBL"></a>
     <a href="https://github.com/Graph-COM/SUREL_PLUS/tree/main/subg_acc"><img src="https://img.shields.io/badge/SubGAcc-v2.2-orange" alt="Version"></a>
-    <a href="https://hits.seeyoufarm.com"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FGraph-COM%2FSUREL_Plus&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Hits&edge_flat=false"/></a>
 </p>
 
-SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL has been successfully deployed on billion-edge graphs. SUREL+ breaks costly subgraph extraction into sampling multiple node sets, where their joint set can act as a proxy of query-induced subgraphs for predictions of multiple queries. For more details, please refer to our paper [SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning](https://arxiv.org/pdf/2303.03379.pdf), to appear in VLDB'23.
+SUREL+ is a novel set-based computation framework for scaling subgraph-based GRL to industry-level graphs. It is the first time that SGRL has been successfully deployed on billion-edge graphs. SUREL+ breaks costly subgraph extraction into sampling multiple node sets, where their joint set can act as a proxy of query-induced subgraphs for predictions of multiple queries. For more details, please refer to our VLDB'23 paper [SUREL+: Moving from Walks to Sets for Scalable Subgraph-based Graph Representation Learning](https://arxiv.org/pdf/2303.03379.pdf).
 
 SUREL+ benefits from the reusability of sampled node sets across different queries (e.g., link, motif), and its set form substantially reduces both memory and computational cost by eliminating heavy node duplication from walk-based sampling. SUREL+ designs dedicated sparse storage **SpG** and a sparse join operator **SpJoin**to handle the irregular-sized node sets. It adopts a modular design, where users can flexibly choose different set samplers, structure encoders and set neural encoders to suit their own SGRL tasks.
 
@@ -29,8 +28,8 @@ Currently, SUREL+ framework supports the following:
 **May 15, 2023:**
 - support SubGAcc v2.3 for billion-edge graphs
 - add two industry-level graph benchmarks
-  * [criteo-click](https://purdue.box.com/v/SGRLDataCriteoClick) with 16.5M records of online banner ads clicking
-  * [twitter-follower](https://purdue.box.com/v/SGRLDataTwitterFollower) with 1.5B following relations of users
+  * `criteo-click` with 16.5M records of online banner ads clicking
+  * `twitter-follower` with 1.5B following relations of users
 
 **Mar. 1, 2023:**
 - support SubGAcc v2.2 and ogbl-vessel v1.1
@@ -43,6 +42,10 @@ Currently, SUREL+ framework supports the following:
 * CUDA >= 11.3
 * python >= 3.8
 * 1.11.0 <= pytorch <= 1.12.0 
+
+## Datasets
+
+SGRL Large-Scale datasets (`criteo-click` and `twitter-follower`) can be accessed via [Zenodo](https://zenodo.org/records/15186065). 
 
 ## SGRL Environment Setup ##
 
@@ -59,7 +62,7 @@ conda env create -f environment.yml
 conda activate sgrl-env
 ```
 
-- Update: SUREL now supports PyTorch 1.12.1 and PyG 2.2.0 with pyg-lib. To install them, simply run
+- SUREL+ now supports PyTorch 1.12.1 and PyG 2.2.0 with pyg-lib. To install them, simply run
 ```bash
 conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
 conda install pyg -c pyg
@@ -74,7 +77,7 @@ For more details, please refer to the [PyTorch](https://pytorch.org/), [PyTorch 
 
 2. Clone the repository `git clone https://github.com/Graph-COM/SUREL_Plus.git`
 
-3. Build and install the [SubGAcc](https://github.com/VeritasYin/subg_acc) library `cd subg_acc;python3 setup.py install`
+3. Build and install the [SubG](https://github.com/Graph-COM/SUREL_Plus/tree/main/subg_acc) library (v2.2) `cd subg_acc;python3 setup.py install`
 
 - To train **SUREL+** for link prediction on `collab` with LP/LSTM:
 ```bash
